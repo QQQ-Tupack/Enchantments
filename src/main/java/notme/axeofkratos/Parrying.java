@@ -1,6 +1,7 @@
 package notme.axeofkratos;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -50,11 +51,13 @@ public class Parrying implements Listener {
             public void run() {
                 if (player.isBlocking()) {
                     Location location = damager.getLocation();
-                    location.setY(damager.getLocation().getY() + 3);
-                    Vector knockback = location.getDirection().multiply(-1).normalize().multiply(2);
-                    damager.setVelocity(knockback);
-
-                    damager.damage(1);
+                    
+	                if (location.distance(player.getLocation()) <= 4) {
+	                    location.setY(damager.getLocation().getY() + 3);
+	                    Vector knockback = location.getDirection().multiply(-1).normalize().multiply(2);
+	                    damager.setVelocity(knockback);
+	                    damager.damage(1);
+	                }
 
                     player.getWorld().playSound(player.getLocation(), Sound.ITEM_SHIELD_BLOCK, 1.5f, 0.8f);
                     player.getWorld().playSound(player.getLocation(), Sound.ENTITY_IRON_GOLEM_HURT, 1.5f, 0.8f);
@@ -89,7 +92,7 @@ public class Parrying implements Listener {
     }
 
 	public ItemStack damageItem(Player player, ItemStack item, int damage) {
-	    if (item != null && item.getItemMeta() instanceof Damageable) {
+	    if (item != null && item.getItemMeta() instanceof Damageable && player.getGameMode() != GameMode.CREATIVE) {
 	        Damageable damageable = (Damageable) item.getItemMeta();
 	        int newDamage = damageable.getDamage() + damage;
 	        damageable.setDamage(newDamage);

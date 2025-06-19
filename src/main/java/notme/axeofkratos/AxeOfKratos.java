@@ -1,6 +1,7 @@
 package notme.axeofkratos;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -38,6 +39,10 @@ public class AxeOfKratos implements Listener {
         	return;
         }
 		
+        if (player.getGameMode() == GameMode.CREATIVE) {
+        	return;
+        }
+        
         if (player.isBlocking()) {
         	return;
         }
@@ -47,10 +52,10 @@ public class AxeOfKratos implements Listener {
         	return;
         }
         
-	    if (axe.getType().toString().contains("AXE")) {
+	    if (axe.getType().toString().contains("_AXE")) {
 	        World world = player.getWorld();
 	        Location startLoc = player.getEyeLocation();
-	        Vector direction = startLoc.getDirection().normalize().multiply(1.5);
+	        Vector direction = startLoc.getDirection().normalize().multiply(2);
 	        player.getInventory().setItemInMainHand(null);
 	        Item thrownAxe = world.dropItem(startLoc, axe);
 	        thrownAxe.setPickupDelay(Integer.MAX_VALUE);
@@ -85,46 +90,85 @@ public class AxeOfKratos implements Listener {
 	// Метод повернення сокири до гравця
 	private void returnAxe(Player player, Item thrownAxe, int slot) {
 	    new BukkitRunnable() {
-            int ticks = 0;
-			@Override
+	        int ticks = 0;
+
+	        @Override
 	        public void run() {
 	            Location axeLoc = thrownAxe.getLocation();
-	            Location playerLoc = player.getLocation().add(0, 1.5, 0);
-	            Vector direction = playerLoc.toVector().subtract(axeLoc.toVector()).normalize();
-	            direction.setY(direction.getY() + 0.2);
+	            Location playerLoc = player.getEyeLocation();
+	            Vector direction = getDirection(axeLoc, playerLoc);
+
 	            if (player.hasPermission("perks.axe.collect-items")) {
 	                collectItemsAndXp(player, thrownAxe);
 	            }
-	            axeLoc.add(direction.multiply(0.5));
-	            thrownAxe.setVelocity(direction.multiply(0.8));
-	            thrownAxe.getWorld().spawnParticle(Particle.CLOUD, thrownAxe.getLocation(), 1);
-	            if (axeLoc.distance(playerLoc) < 1.5 || ticks>=60) {
-	                ItemStack axe = thrownAxe.getItemStack();
-	                ItemStack item = player.getInventory().getItem(slot);
-	                if (item != null) {
-	                	player.getInventory().addItem(item);
-	                }
-	                player.getInventory().setItem(slot, damageItem(player, axe, 1));
 
-	                thrownAxe.remove();
-	                player.getWorld().playSound(playerLoc, Sound.ITEM_TRIDENT_THROW, (float) 0.4, 1);
+	            moveAxe(thrownAxe, axeLoc, direction);
+
+	            if (isAxeCloseEnough(axeLoc, playerLoc) || ticks >= 60) {
+	                returnAxeToPlayer(player, thrownAxe, slot, playerLoc, ticks);
 	                this.cancel();
 	            }
+
 	            if (player.hasPermission("perks.axe.callback-damage")) {
-	                for (Entity entity : thrownAxe.getNearbyEntities(1.5, 1.5, 1.5)) {
-	                    if (entity instanceof LivingEntity && entity != player) {
-	                    	applyAxeDamage(thrownAxe.getItemStack(), (LivingEntity) entity, player);
-	                        thrownAxe.getWorld().spawnParticle(Particle.CRIT, entity.getLocation(), 1);
-	                    }
-	                }
+	                applyDamageToEntities(thrownAxe, player);
 	            }
-                ticks++;
+
+	            ticks++;
 	        }
+
 	    }.runTaskTimer(Brain.getInstance(), 0, 1);
 	}
 
+	private Vector getDirection(Location axeLoc, Location playerLoc) {
+	    Vector direction = playerLoc.toVector().subtract(axeLoc.toVector()).normalize();
+	    direction.setY(direction.getY() + 0.2);
+	    return direction;
+	}
+
+	private void moveAxe(Item thrownAxe, Location axeLoc, Vector direction) {
+	    axeLoc.add(direction.multiply(0.5));
+	    thrownAxe.setVelocity(direction.multiply(0.8));
+	    thrownAxe.getWorld().spawnParticle(Particle.CLOUD, thrownAxe.getLocation(), 1);
+	}
+
+	private boolean isAxeCloseEnough(Location axeLoc, Location playerLoc) {
+	    return axeLoc.distance(playerLoc) < 1.5;
+	}
+
+	private void returnAxeToPlayer(Player player, Item thrownAxe, int slot, Location playerLoc, int ticks) {
+	    ItemStack axe = thrownAxe.getItemStack();
+	    thrownAxe.remove();
+
+	    BukkitRunnable returnTask = new BukkitRunnable() {
+	        @Override
+	        public void run() {
+	            ItemStack item = player.getInventory().getItem(slot);
+	            player.getInventory().setItem(slot, damageItem(player, axe, 1));
+	            if (item != null) {
+	                player.getInventory().addItem(item);
+	            }
+	            player.getWorld().playSound(playerLoc, Sound.ITEM_TRIDENT_THROW, 0.4f, 1);
+	        }
+	    };
+
+	    if (ticks <= 20) {
+	        returnTask.runTaskLater(Brain.getInstance(), 20 - ticks);
+	    } else {
+	        returnTask.run();
+	    }
+	}
+
+	private void applyDamageToEntities(Item thrownAxe, Player player) {
+	    for (Entity entity : thrownAxe.getNearbyEntities(1.5, 1.5, 1.5)) {
+	        if (entity instanceof LivingEntity && entity != player) {
+	            applyAxeDamage(thrownAxe.getItemStack(), (LivingEntity) entity, player);
+	            thrownAxe.getWorld().spawnParticle(Particle.CRIT, entity.getLocation(), 1);
+	        }
+	    }
+	}
+
 	public ItemStack damageItem(Player player, ItemStack item, int damage) {
-	    if (item != null && item.getItemMeta() instanceof Damageable) {
+	    if (item != null && item.getItemMeta() instanceof Damageable && player.getGameMode() != GameMode.CREATIVE) {
 	        Damageable damageable = (Damageable) item.getItemMeta();
 	        int newDamage = damageable.getDamage() + damage;
 	        damageable.setDamage(newDamage);

@@ -22,6 +22,7 @@ public class Brain extends JavaPlugin implements Listener {
     	new ChickenParachute().register();
     	new Parrying().register();
     	new WolfMyFriend().register();
+    	new DoubleJump().register();
     }
     
     @Override
