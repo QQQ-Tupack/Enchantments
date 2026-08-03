@@ -43,7 +43,38 @@ public abstract class Mechanic implements Listener {
     public abstract List<Material> getSupportedItems();
     public abstract List<EnchantSlot> getSlots();
 
-    // Compatibility records moved into Mechanic
+    public List<Material> getExcludedItems() {
+        return Collections.emptyList();
+    }
+
+    public final List<Material> resolveItems() {
+        Set<Material> base = new LinkedHashSet<>();
+        List<Material> supported = getSupportedItems();
+
+        if (supported == null || supported.isEmpty()) {
+            for (Material material : Material.values()) {
+                if (material.isLegacy() || !material.isItem() || material.isAir()) continue;
+                base.add(material);
+            }
+        } else {
+            base.addAll(supported);
+        }
+
+        List<Material> excluded = getExcludedItems();
+        if (excluded != null) base.removeAll(excluded);
+
+        return List.copyOf(base);
+    }
+
+    public final boolean isItemAllowed(Material material) {
+        if (material == null || material.isAir()) return false;
+        List<Material> excluded = getExcludedItems();
+        if (excluded != null && excluded.contains(material)) return false;
+
+        List<Material> supported = getSupportedItems();
+        return supported == null || supported.isEmpty() || supported.contains(material);
+    }
+
     public static record EnchantMeta(
             String key,
             String name,
@@ -212,6 +243,14 @@ public abstract class Mechanic implements Listener {
                     materialNames.add(material.name());
                 }
                 config.set("supported-items", materialNames);
+                updated = true;
+            }
+            if (!config.contains("excluded-items")) {
+                List<String> excludedNames = new ArrayList<>();
+                for (Material material : getExcludedItems()) {
+                    excludedNames.add(material.name());
+                }
+                config.set("excluded-items", excludedNames);
                 updated = true;
             }
 

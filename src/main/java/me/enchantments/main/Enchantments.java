@@ -1,22 +1,36 @@
 package me.enchantments.main;
 
 import me.enchantments.mechanics.ParryMechanic;
-import me.enchantments.mechanics.SaturationMechanic;
+import me.enchantments.mechanics.PhantomVeilMechanic;
+import me.enchantments.mechanics.RadiantAuraMechanic;
+import me.enchantments.mechanics.SaturationBonusMechanic;
 import me.enchantments.mechanics.SleepRestoreMechanic;
+import me.enchantments.mechanics.SoaringBoundMechanic;
+import me.enchantments.mechanics.StoneSkinMechanic;
+import me.enchantments.mechanics.SwiftLaborMechanic;
+import me.enchantments.mechanics.TitanMightMechanic;
+import me.enchantments.mechanics.UmbralSightMechanic;
+import me.enchantments.mechanics.VitalSatietyMechanic;
 import me.enchantments.mechanics.VoidRescueMechanic;
 import me.enchantments.mechanics.WolfCompanionMechanic;
 import me.enchantments.mechanics.WolfFetchMechanic;
 import me.enchantments.mechanics.WolfSniffMechanic;
 import me.enchantments.listeners.GlintUpdateListener;
 import me.enchantments.listeners.SourceInjector;
+import me.enchantments.mechanics.AbyssalBreathMechanic;
 import me.enchantments.mechanics.AxeCleaveMechanic;
 import me.enchantments.mechanics.AxePullMechanic;
 import me.enchantments.mechanics.AxeThrowMechanic;
 import me.enchantments.mechanics.DoubleJumpMechanic;
 import me.enchantments.mechanics.FireWardMechanic;
+import me.enchantments.mechanics.FortunesFavorMechanic;
+import me.enchantments.mechanics.GaleDescentMechanic;
+import me.enchantments.mechanics.GaleStrideMechanic;
 import me.enchantments.mechanics.GrapplingHookMechanic;
 import me.enchantments.mechanics.HorseCompanionMechanic;
+import me.enchantments.mechanics.InfernalShieldMechanic;
 import me.enchantments.mechanics.Mechanic;
+import me.enchantments.mechanics.OceanGraceMechanic;
 import me.enchantments.mechanics.ParachuteMechanic;
 
 import org.bukkit.Bukkit;
@@ -50,10 +64,30 @@ public final class Enchantments extends JavaPlugin {
         new VoidRescueMechanic().register();
         new SleepRestoreMechanic().register();
         new FireWardMechanic().register();
-        new SaturationMechanic().register();
-        
+
+        new InfernalShieldMechanic().register();
+        new StoneSkinMechanic().register();
+
+        new SaturationBonusMechanic().register();
+        new VitalSatietyMechanic().register();
+
+        new FortunesFavorMechanic().register();
+        new SwiftLaborMechanic().register();
+
+        new TitanMightMechanic().register();
+        new GaleStrideMechanic().register();
+        new GaleDescentMechanic().register();
+        new RadiantAuraMechanic().register();
+
+        new AbyssalBreathMechanic().register();
+        new OceanGraceMechanic().register();
+
+        new UmbralSightMechanic().register();
+        new PhantomVeilMechanic().register();
+        new SoaringBoundMechanic().register();
+
         DatapackGenerator.install();
-        
+
         Bukkit.getPluginManager().registerEvents(new SourceInjector(), this);
         Bukkit.getPluginManager().registerEvents(new GlintUpdateListener(), this);
     }

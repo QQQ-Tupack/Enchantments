@@ -72,6 +72,7 @@ public final class DatapackGenerator {
         String slots = m.getSlots().stream()
                 .map(slot -> "\"" + slot.datapackId() + "\"")
                 .collect(Collectors.joining(", "));
+        String effects = m.getEffects() == null || m.getEffects().isBlank() ? "{}" : m.getEffects().trim();
         return """
                 {
                   "description": %s,
@@ -83,15 +84,18 @@ public final class DatapackGenerator {
                   "max_cost": { "base": %d, "per_level_above_first": %d },
                   "anvil_cost": 2,
                   "slots": [%s],
-                  "effects": {}
+                  "effects": %s
                 }
                 """.formatted(desc, itemsTag, itemsTag, m.weight(), m.getMaxLevel(),
-                m.getAnvilBaseCost(), m.getAnvilCostPerLevel(), slots);
+                m.getAnvilBaseCost(), m.getAnvilCostPerLevel(), slots, effects);
     }
 
     private static String itemTagJson(Mechanic m) {
-        List<String> ids = m.getSupportedItems().stream()
+        // resolveItems() уже врахував винятки: або supported мінус excluded,
+        // або (якщо supported порожній) усі предмети гри мінус excluded
+        List<String> ids = m.resolveItems().stream()
                 .map(material -> "\"minecraft:" + material.name().toLowerCase() + "\"")
+                .sorted()
                 .toList();
         return "{\n  \"values\": [\n    " + String.join(",\n    ", ids) + "\n  ]\n}\n";
     }
