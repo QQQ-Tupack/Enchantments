@@ -243,6 +243,7 @@ enchantments:
     name: "Гак-Кішка"
     supported_items: "minecraft:fishing_rod"
     slots: [mainhand, offhand]
+    hide_glint: true
     weight: 2
     max_level: 1
     triggers:
@@ -356,6 +357,7 @@ enchantments:
     name: "Сутінковий зір"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -373,6 +375,7 @@ enchantments:
     name: "Дарунок фортуни"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -390,6 +393,7 @@ enchantments:
     name: "Полум'яний щит"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -407,6 +411,7 @@ enchantments:
     name: "Легкий спуск"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -424,6 +429,7 @@ enchantments:
     name: "Порив висоти"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -441,6 +447,7 @@ enchantments:
     name: "Аура сяйва"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -458,11 +465,12 @@ enchantments:
     name: "Живильна ситість"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: eat
         effects:
-          - { type: saturation, duration: 100, ambient: true, particles: true, icon: false }
+          - { type: saturation, duration: 5, ambient: true, particles: true, icon: false }
     sources: 
       enchanting_table: false
       loot_tables:
@@ -475,6 +483,7 @@ enchantments:
     name: "Ритм праці"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -492,6 +501,7 @@ enchantments:
     name: "Глибинне дихання"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -509,6 +519,7 @@ enchantments:
     name: "Примарна завіса"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -526,6 +537,7 @@ enchantments:
     name: "Грація океану"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -543,6 +555,7 @@ enchantments:
     name: "Титанська сила"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -560,6 +573,7 @@ enchantments:
     name: "Кам'яна шкіра"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
@@ -577,6 +591,7 @@ enchantments:
     name: "Прудкий крок"
     supported_items: "minecraft:bedrock"
     slots: [head]
+    hide_glint: true
     triggers:
       - mechanic: effect
         trigger: worn
