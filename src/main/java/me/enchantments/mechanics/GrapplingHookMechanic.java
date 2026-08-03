@@ -1,11 +1,10 @@
 package me.enchantments.mechanics;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.FishHook;
@@ -20,30 +19,64 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
+import me.enchantments.mechanics.Mechanic.EnchantSlot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class GrapplingHookMechanic extends Mechanic {
 
-    private final double pullSpeed, launchMultiplier, minEntityDistance, wallImmunityTicks;
-    private final int durabilityCost;
-
     private final Set<UUID> pulling = new HashSet<>();
     private final Set<UUID> wallImmune = new HashSet<>();
 
-    public GrapplingHookMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        pullSpeed = params != null ? params.getDouble("pull_speed", 1.5) : 1.5;
-        launchMultiplier = params != null ? params.getDouble("launch_multiplier", 2.5) : 2.5;
-        minEntityDistance = params != null ? params.getDouble("min_entity_distance", 3.0) : 3.0;
-        wallImmunityTicks = params != null ? params.getInt("wall_immunity_ticks", 60) : 60;
-        durabilityCost = params != null ? params.getInt("durability_cost", 1) : 1;
+    @Override
+    public String getId() {
+        return "grappling_hook";
+    }
+
+    @Override
+    public String getName() {
+        return "Гак кішка";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє рухатися швидко за допомогою гака кішки";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return true;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.BEDROCK);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "pull-speed", 1.5,
+            "launch-multiplier", 2.5,
+            "min-entity-distance", 3.0,
+            "wall-immunity-ticks", 60,
+            "durability-cost", 1
+        );
     }
 
     @EventHandler
     public void onDamage(EntityDamageEvent e) {
+        if (!isMechanicEnabled()) return;
         if (e.getEntity() instanceof Player p && e.getCause() == EntityDamageEvent.DamageCause.FLY_INTO_WALL
                 && wallImmune.contains(p.getUniqueId())) {
             e.setCancelled(true);
@@ -52,10 +85,15 @@ public final class GrapplingHookMechanic extends Mechanic {
 
     @EventHandler
     public void onFish(PlayerFishEvent e) {
+        if (!isMechanicEnabled()) return;
         if (e.getHand() == null) return;
         Player p = e.getPlayer();
         ItemStack rod = p.getInventory().getItem(e.getHand());
         if (levelOf(rod) == 0) return;
+
+        double launchMultiplier = getDouble("launch-multiplier");
+        double minEntityDistance = getDouble("min-entity-distance");
+        int durabilityCost = getInt("durability-cost");
 
         FishHook hook = e.getHook();
         hook.setVelocity(hook.getVelocity().multiply(launchMultiplier));
@@ -94,6 +132,7 @@ public final class GrapplingHookMechanic extends Mechanic {
         Location from = p.getLocation();
         Vector dir = target.toVector().subtract(from.toVector());
         double distance = dir.length();
+        double pullSpeed = getDouble("pull-speed");
         double time = Math.max(distance / pullSpeed, 1);
         dir.normalize();
         Vector velocity = dir.multiply(distance / time);
@@ -105,6 +144,7 @@ public final class GrapplingHookMechanic extends Mechanic {
 
         pulling.add(uid);
         wallImmune.add(uid);
+        int wallImmunityTicks = getInt("wall-immunity-ticks");
         Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> wallImmune.remove(uid), (long) wallImmunityTicks);
 
         new BukkitRunnable() {

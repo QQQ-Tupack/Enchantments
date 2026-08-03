@@ -2,8 +2,7 @@ package me.enchantments.listeners;
 
 import me.enchantments.main.Enchantments;
 import me.enchantments.mechanics.Mechanic;
-import me.enchantments.utils.EnchantMeta;
-import me.enchantments.utils.EnchantmentRegistry;
+// EnchantMeta removed — use Mechanic.hideEnchantmentGlint()
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.enchantments.Enchantment;
@@ -83,9 +82,8 @@ public final class GlintUpdateListener implements Listener {
 
     private Set<String> hideGlintKeys() {
         Set<String> keys = new java.util.HashSet<>();
-        for (Mechanic m : EnchantmentRegistry.mechanics()) {
-            EnchantMeta meta = m.meta();
-            if (meta.hideGlint()) keys.add("enchantments:" + meta.key());
+        for (Mechanic m : Mechanic.getAll()) {
+            if (m.hideEnchantmentGlint()) keys.add("enchantments:" + m.getId().toLowerCase());
         }
         return keys;
     }

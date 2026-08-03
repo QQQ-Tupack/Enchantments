@@ -1,7 +1,6 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -24,24 +23,52 @@ public final class ParryMechanic extends Mechanic {
 
     private record Attack(Entity damager, double damage) {}
 
-    private final int windowTicks, shieldDamage, failCooldownTicks, replayDelayStepTicks;
-    private final double counterDamage, counterRange, knockbackMult, knockbackMinY;
-
     private final Map<UUID, Map<UUID, Attack>> windows = new HashMap<>();
     private final Set<UUID> replaying = new HashSet<>();
     private final Set<UUID> cooldown = new HashSet<>();
 
-    public ParryMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        windowTicks = params != null ? params.getInt("window_ticks", 10) : 10;
-        shieldDamage = params != null ? params.getInt("shield_damage", 3) : 3;
-        counterDamage = params != null ? params.getDouble("counter_damage", 1.0) : 1.0;
-        counterRange = params != null ? params.getDouble("counter_range", 3.0) : 3.0;
-        knockbackMult = params != null ? params.getDouble("knockback_mult", 1.5) : 1.5;
-        knockbackMinY = params != null ? params.getDouble("knockback_min_y", 0.3) : 0.3;
-        failCooldownTicks = params != null ? params.getInt("fail_cooldown_ticks", 20) : 20;
-        replayDelayStepTicks = params != null ? params.getInt("replay_delay_step_ticks", 2) : 2;
+    @Override
+    public String getId() {
+        return "parry";
+    }
+
+    @Override
+    public String getName() {
+        return "Парування";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє гравцю парирувати удари щитом та наносити шкоду атакуючому";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.SHIELD);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "window-ticks", 10,
+            "shield-damage", 3,
+            "counter-damage", 1.0,
+            "counter-range", 3.0,
+            "knockback-mult", 1.5,
+            "knockback-min-y", 0.3,
+            "fail-cooldown-ticks", 20,
+            "replay-delay-step-ticks", 2
+        );
     }
 
     private ItemStack shield(Player p) {
@@ -52,6 +79,7 @@ public final class ParryMechanic extends Mechanic {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDamage(EntityDamageByEntityEvent e) {
+        if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Player player) || e.isCancelled()) return;
         UUID uid = player.getUniqueId();
         if (replaying.contains(uid) || cooldown.contains(uid) || player.isBlocking()) return;
@@ -74,6 +102,7 @@ public final class ParryMechanic extends Mechanic {
 
     private void openWindow(Player player) {
         UUID uid = player.getUniqueId();
+        int windowTicks = getInt("window-ticks");
         new BukkitRunnable() {
             int t = 0;
             @Override public void run() {
@@ -88,6 +117,12 @@ public final class ParryMechanic extends Mechanic {
     private void succeed(Player player) {
         Map<UUID, Attack> window = windows.remove(player.getUniqueId());
         if (window == null) return;
+
+        int shieldDamage = getInt("shield-damage");
+        double counterDamage = getDouble("counter-damage");
+        double counterRange = getDouble("counter-range");
+        double knockbackMult = getDouble("knockback-mult");
+        double knockbackMinY = getDouble("knockback-min-y");
 
         damageShield(player, shieldDamage);
         player.getWorld().playSound(player.getLocation(), Sound.ITEM_SHIELD_BLOCK, 1.5f, 0.8f);
@@ -111,6 +146,9 @@ public final class ParryMechanic extends Mechanic {
         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 0.5f);
         UUID uid = player.getUniqueId();
         cooldown.add(uid);
+
+        int replayDelayStepTicks = getInt("replay-delay-step-ticks");
+        int failCooldownTicks = getInt("fail-cooldown-ticks");
 
         int delay = 0;
         for (Attack a : window.values()) {

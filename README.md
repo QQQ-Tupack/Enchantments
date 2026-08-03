@@ -1,190 +1,160 @@
 # Enchantments
 
-> **Створюйте механіки один раз. Використовуйте їх на будь-яких предметах.**
+> **Пишіть механіку один раз. Вішайте її на будь-який предмет через зачарування.**
 
 ## Що таке Enchantments?
 
-**Enchantments** — це фреймворк для Paper, який дозволяє створювати власні механіки предметів у вигляді зачарувань.
+**Enchantments** — фреймворк для Paper, який перетворює довільну Java-логіку на ванільне зачарування.
 
-Замість того щоб щоразу писати окрему інтеграцію для нового предмета, достатньо один раз реалізувати механіку як зачарування.
+Механіка пишеться один раз як звичайний Java-клас, що успадковує `Mechanic`. Далі вона працює на будь-якому предметі, підтримка якого визначена в самій механіці — чоботи, сокири, броня коня/вовка, щит, вудка — і не потребує окремої інтеграції під кожен новий предмет.
 
-Після цього її можна використовувати на будь-якому предметі, просто додавши відповідне зачарування.
+Плагін сам генерує:
 
-Неважливо, чи предмет створений через:
-
-* Oraxen
-* ItemsAdder
-* MMOItems
-* власний плагін
-* або це звичайний предмет Minecraft.
+* ванільний datapack (`data/enchantments/enchantment/<id>.json`) з правильним `weight`, `max_level`, `slots`, `supported_items`;
+* тег предметів (`data/enchantments/tags/item/<id>.json`) з `getSupportedItems()`;
+* конфіг механіки (`plugins/Enchantments/mechanics/<id>.yml`) з дефолтами з коду.
 
 ---
 
-# Чому?
+## Створення механіки
 
-Припустимо, ви хочете зробити меч, який викликає блискавку.
-
-Зазвичай доводиться:
-
-* визначати потрібний ItemStack;
-* слухати події;
-* окремо зберігати налаштування;
-* прив'язувати всю логіку саме до цього предмета.
-
-Потім ви захочете зробити сокиру з такою ж здібністю.
-
-Потім посох.
-
-Потім молот.
-
-У результаті одна й та сама логіка копіюється знову і знову.
-
-**Enchantments** вирішує цю проблему.
-
-Ви пишете механіку лише один раз. Після цього будь-який предмет може отримати її, якщо додати відповідне зачарування.
-
----
-
-# Створення механіки
-
-Нова механіка виглядає як звичайний Java-клас.
+Механіка — звичайний клас, що успадковує `Mechanic` і перевизначає обов'язкові методи метаданих.
 
 ```java
-public class DoubleJump extends Mechanic {
+public final class DoubleJumpMechanic extends Mechanic {
 
-    private final Setting<Double> velocityY =
-            setting("velocity_y", Double.class, 0.6);
+    @Override
+    public String getId() {
+        return "double_jump";
+    }
 
-    private final Setting<Double> velocityPerLevel =
-            setting("velocity_y_per_level", Double.class, 0.1);
+    @Override
+    public String getName() {
+        return "Подвійний стрибок";
+    }
 
-    private final Setting<Double> forwardMultiplier =
-            setting("forward_mult", Double.class, 0.5);
+    @Override
+    public String getDescription() {
+        return "Дозволяє гравцю виконати подвійний стрибок у повітрі";
+    }
 
-    public DoubleJump() {
-        super("double_jump");
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.LEATHER_BOOTS, Material.CHAINMAIL_BOOTS, Material.IRON_BOOTS,
+                       Material.GOLDEN_BOOTS, Material.DIAMOND_BOOTS, Material.NETHERITE_BOOTS);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.FEET);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "velocity-y", 0.6,
+            "velocity-y-per-level", 0.1,
+            "forward-mult", 0.5,
+            "food-cost", 0.1,
+            "min-food", 7,
+            "safe-fall-height", 3.0
+        );
     }
 
     @EventHandler
-    public void onPlayerJump(PlayerJumpEvent event) {
-
-        // Ваша логіка
-
+    public void onJump(PlayerJumpEvent event) {
+        // ваша логіка
     }
-
 }
 ```
 
-Плагін автоматично бере на себе:
+Обов'язкові метадані:
 
-* завантаження параметрів;
-* систему зачарувань;
-* життєвий цикл механік;
-* доступ до рівня зачарування;
-* перевірку предметів;
-* інтеграцію з Bukkit/Paper.
+| Метод | Призначення |
+|---|---|
+| `getId()` | унікальний ідентифікатор — ключ enchantment'а і файлу конфігу |
+| `getName()` | назва, що йде у `description`/`fallback` |
+| `getDescription()` | опис (наразі лише для конфігу, не в datapack) |
+| `getMaxLevel()` | максимальний рівень |
+| `getSupportedItems()` | список `Material`, з яких генерується item-tag |
+| `getSlots()` | список `EnchantSlot`, у яких зачарування діє |
 
-Вам залишається лише написати логіку.
+Реєстрація виконується самим плагіном при старті:
 
----
-
-# Конфігурація
-
-Після створення механіки достатньо описати зачарування у конфігурації.
-
-```yaml
-enchantments:
-
-  double_jump:
-
-    name: "Подвійний стрибок"
-
-    supported_items: "#enchantments:wearable_boots"
-
-    slots:
-      - feet
-
-    weight: 3
-
-    max_level: 3
-
-    triggers:
-      - mechanic: double_jump
-        velocity_y: 0.6
-        velocity_y_per_level: 0.1
-        forward_mult: 0.5
-        food_cost: 0.1
-        min_food: 7
-        safe_fall_height: 3.0
-
-    sources:
-      enchanting_table: true
-
-      loot_tables:
-        - table: minecraft:chests/end_city_treasure
-          chance: 0.15
-          min_level: 1
-          max_level: 3
+```java
+Mechanic.init(this);
+new DoubleJumpMechanic().register();
+new AxeCleaveMechanic().register();
+// ...
 ```
 
-У конфігурації можна описати практично все:
-
-* назву зачарування;
-* підтримувані предмети;
-* слоти екіпірування;
-* максимальний рівень;
-* вагу при генерації;
-* параметри механіки;
-* тригери;
-* джерела отримання;
-* лут-таблиці;
-* торгівлю з жителями;
-* або будь-які інші параметри, які використовує ваша механіка.
-
 ---
 
-# Один код. Будь-яка кількість предметів.
 
-Написали механіку `double_jump`.
+## Джерела отримання, вартість, вага
 
-Тепер її можна додати:
+Ці параметри мають дефолти в коді, які й потрапляють у `mechanics/<id>.yml` при першому запуску:
 
-* будь-яким чоботам;
-* кастомним чоботам з Oraxen;
-* предметам з ItemsAdder;
-* MMOItems;
-* предметам із власного плагіна.
+```java
+@Override
+public boolean isEnchantingTableAllowed() { return true; }
 
-Жодної нової інтеграції.
+@Override
+public double getEnchantingTableChance() { return 0.12; }
 
-Жодного дублювання коду.
+@Override
+public boolean isChestLootAllowed() { return true; }
 
-Лише додайте зачарування.
+@Override
+public double getChestLootChance() { return 0.05; }
 
+@Override
+public List<String> getLootChests() {
+    return List.of("minecraft:chests/end_city_treasure");
+}
+
+@Override
+public boolean isVillagerTradeAllowed() { return true; }
+
+@Override
+public Map<String, Map<String, Object>> getVillagerTrades() {
+    return Map.of("LIBRARIAN", Map.of("level", 2, "min-emeralds", 10, "max-emeralds", 24));
+}
+
+@Override
+public int getAnvilBaseCost() { return 8; }
+
+@Override
+public int getAnvilCostPerLevel() { return 4; }
+
+@Override
+public int getWeight() { return 10; }
+```
+
+## Кастомні налаштування механіки
+
+Усе, що специфічне для конкретної механіки, іде через `getDefaults()` + геттери, і живе під `settings.*` в yml:
+
+```java
+@Override
+public Map<String, Object> getDefaults() {
+    return Map.of("cleave-radius", 2.0, "cleave-damage", 3.0);
+}
+```
+
+Читання в рантаймі:
+
+```java
+double radius = getDouble("cleave-radius");
+double damage = getDouble("cleave-damage");
+```
 ---
 
-# Що можна створити?
+## Основна ідея
 
-За допомогою Enchantments можна реалізувати практично будь-яку механіку, яка працює через Bukkit/Paper API.
-
-Наприклад:
-
-* активні здібності;
-* пасивні ефекти;
-* бойові механіки;
-* магію;
-* RPG-системи;
-* інструменти;
-* фермерські механіки;
-* риболовлю;
-* ефекти броні;
-* власні ігрові режими;
-* або будь-яку іншу ідею.
-
----
-
-# Основна ідея
-
-**Enchantments** дозволяє розробнику зосередитися виключно на написанні механік, не витрачаючи час на їх інтеграцію з предметами.
-
-Напишіть механіку один раз. Після цього використовуйте її на будь-якій кількості предметів, просто додаючи відповідне зачарування.
+Механіка описується один раз як Java-клас. Плагін бере на себе реєстрацію слухача, конфіг з дефолтами, і генерацію ванільного зачарування з правильними предметами та слотами — розробник пише лише логіку в `@EventHandler`.

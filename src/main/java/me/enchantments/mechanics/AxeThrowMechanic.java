@@ -1,7 +1,6 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
@@ -18,25 +17,60 @@ import java.util.*;
 
 public final class AxeThrowMechanic extends Mechanic {
 
-    private final int cooldownTicks, maxFlightTicks, returnTicks, hungerCost, durabilityCost;
-    private final double damageMult;
-
     private final Set<UUID> thrown = new HashSet<>();
     private final Set<UUID> onCooldown = new HashSet<>();
 
-    public AxeThrowMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        cooldownTicks = params != null ? params.getInt("cooldown_ticks", 60) : 60;
-        maxFlightTicks = params != null ? params.getInt("max_flight_ticks", 15) : 15;
-        returnTicks = params != null ? params.getInt("return_ticks", 20) : 20;
-        hungerCost = params != null ? params.getInt("hunger_cost", 1) : 1;
-        durabilityCost = params != null ? params.getInt("durability_cost", 2) : 2;
-        damageMult = params != null ? params.getDouble("damage_mult", 0.75) : 0.75;
+    @Override
+    public String getId() {
+        return "axe_throw";
+    }
+
+    @Override
+    public String getName() {
+        return "Кидок сокири";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє кидати сокиру гарячою клавішею";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return false;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, 
+                       Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.MAINHAND);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "cooldown-ticks", 60,
+            "max-flight-ticks", 15,
+            "return-ticks", 20,
+            "hunger-cost", 1,
+            "durability-cost", 2,
+            "damage-mult", 0.75
+        );
     }
 
     @EventHandler
     public void onThrow(PlayerInteractEvent e) {
+        if (!isMechanicEnabled()) return;
         Player p = e.getPlayer();
         ItemStack axe = p.getInventory().getItemInMainHand();
         if (levelOf(axe) == 0) return;
@@ -46,6 +80,7 @@ public final class AxeThrowMechanic extends Mechanic {
                 || (e.getAction() == Action.RIGHT_CLICK_BLOCK && e.getClickedBlock() != null && e.getClickedBlock().isPassable());
         if (!rightClick || blockedByShield || p.getGameMode() == GameMode.CREATIVE || thrown.contains(p.getUniqueId())) return;
 
+        int hungerCost = getInt("hunger-cost");
         if (onCooldown.contains(p.getUniqueId())) {
             p.sendActionBar(Component.text("Сокира ще не готова!", NamedTextColor.RED));
             return;
@@ -57,6 +92,7 @@ public final class AxeThrowMechanic extends Mechanic {
 
         p.setFoodLevel(p.getFoodLevel() - hungerCost);
         onCooldown.add(p.getUniqueId());
+        int cooldownTicks = getInt("cooldown-ticks");
         Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> onCooldown.remove(p.getUniqueId()), cooldownTicks);
 
         World w = p.getWorld();
@@ -68,6 +104,8 @@ public final class AxeThrowMechanic extends Mechanic {
         w.playSound(p.getLocation(), Sound.ITEM_TRIDENT_RIPTIDE_1, 1, 1);
         thrown.add(p.getUniqueId());
 
+        int maxFlightTicks = getInt("max-flight-ticks");
+        double damageMult = getDouble("damage-mult");
         new BukkitRunnable() {
             int t = 0;
             @Override public void run() {
@@ -90,6 +128,8 @@ public final class AxeThrowMechanic extends Mechanic {
     }
 
     private void returnAxe(Player p, Item flying) {
+        int returnTicks = getInt("return-ticks");
+        int durabilityCost = getInt("durability-cost");
         new BukkitRunnable() {
             int t = 0;
             @Override public void run() {

@@ -1,8 +1,8 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,28 +10,65 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class AxeCleaveMechanic extends Mechanic {
 
-    private final double cleaveRadius;
-    private final double cleaveDamage;
     private final Map<UUID, Long> activeCleavePulls = new ConcurrentHashMap<>();
 
-    public AxeCleaveMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        cleaveRadius = params != null ? params.getDouble("cleave_radius", 2.0) : 2.0;
-        cleaveDamage = params != null ? params.getDouble("cleave_damage", 3.0) : 3.0;
+    @Override
+    public String getId() {
+        return "axe_cleave";
+    }
 
-        // Запусти task для постійної перевірки шкоди
+    @Override
+    public String getName() {
+        return "Розтинання";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Наносить урон усім ворогам навколо при активації";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return false;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, 
+                       Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "cleave-radius", 2.0,
+            "cleave-damage", 3.0
+        );
+    }
+
+    @Override
+    protected void onEnable() {
         new CleavePulseTask().runTaskTimer(Enchantments.getInstance(), 0L, 2L);
     }
 
     @EventHandler
     public void onThrow(PlayerInteractEvent e) {
+        if (!isMechanicEnabled()) return;
         Player p = e.getPlayer();
         ItemStack axe = p.getInventory().getItemInMainHand();
         if (levelOf(axe) == 0) return;
@@ -42,6 +79,8 @@ public final class AxeCleaveMechanic extends Mechanic {
     private final class CleavePulseTask extends BukkitRunnable {
         @Override
         public void run() {
+            double cleaveRadius = getDouble("cleave-radius");
+            double cleaveDamage = getDouble("cleave-damage");
             Bukkit.getOnlinePlayers().forEach(player -> {
                 UUID uuid = player.getUniqueId();
                 if (!activeCleavePulls.containsKey(uuid)) return;

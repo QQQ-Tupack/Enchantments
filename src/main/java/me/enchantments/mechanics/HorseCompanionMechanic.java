@@ -1,7 +1,6 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -17,24 +16,61 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import java.util.*;
+
 public final class HorseCompanionMechanic extends Mechanic implements CommandExecutor {
 
-    private final boolean followEnabled;
-    private final double followDistance;
-    private final String command;
-
-    public HorseCompanionMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        followEnabled = params != null ? params.getBoolean("follow.enabled", true) : true;
-        followDistance = params != null ? params.getDouble("follow.distance", 25.0) : 25.0;
-        command = params != null ? params.getString("command", "whistle") : "whistle";
-
-        if (followEnabled) new HorseFollower().runTaskTimer(Enchantments.getInstance(), 0L, 100L);
+    @Override
+    public String getId() {
+        return "horse_companion";
     }
 
     @Override
-    public String commandName() { return command; }
+    public String getName() {
+        return "Кінь компаньйон";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Кінь ходитиме за вами";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return false;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.LEATHER_HORSE_ARMOR, Material.IRON_HORSE_ARMOR, 
+                       Material.GOLDEN_HORSE_ARMOR, Material.DIAMOND_HORSE_ARMOR);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.BODY);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "follow-enabled", true,
+            "follow-distance", 25.0
+        );
+    }
+
+    @Override
+    protected void onEnable() {
+        boolean followEnabled = getBoolean("follow-enabled");
+        if (followEnabled) {
+            new HorseFollower().runTaskTimer(Enchantments.getInstance(), 0L, 100L);
+        }
+    }
 
     private boolean guarded(AbstractHorse horse) {
         if (!horse.isTamed() || horse.getOwner() == null || horse.getEquipment() == null) return false;
@@ -61,6 +97,7 @@ public final class HorseCompanionMechanic extends Mechanic implements CommandExe
     private final class HorseFollower extends BukkitRunnable {
         @Override
         public void run() {
+            double followDistance = getDouble("follow-distance");
             Bukkit.getOnlinePlayers().forEach(player -> {
                 Location loc = player.getLocation();
                 if (player.isInWater() || loc.getY() <= 10 || player.getVehicle() != null) return;

@@ -1,161 +1,122 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.utils.EnchantMeta;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.ItemStack;
 
-/**
- * Приклад механіки - використовуйте як шаблон для створення нових механік
- * 
- * КРОК 1: Замініть назву класу на вашу (наприклад: MyAwesomeMechanic)
- * КРОК 2: Додайте приватні поля для параметрів з конфіга
- * КРОК 3: Реалізуйте конструктор та витягніть параметри
- * КРОК 4: Добавте EventHandler методи для слухання подій
- * КРОК 5: Додайте логіку вашої механіки
- * КРОК 6: Зареєструйте механіку в EnchantmentRegistry
- * КРОК 7: Добавте конфіг енчарту у config.yml
- */
-public final class ExampleMechanic extends Mechanic {
+import java.util.List;
+import java.util.Map;
 
-    // ──────────────────────────────────────────────────────────────────
-    // КРОК 2: Додайте приватні поля для параметрів з конфіга
-    // ──────────────────────────────────────────────────────────────────
-    
-    private final int exampleIntParam;
-    private final double exampleDoubleParam;
-    private final String exampleStringParam;
-    private final boolean exampleBooleanParam;
+public class ExampleMechanic extends Mechanic {
 
-    // ──────────────────────────────────────────────────────────────────
-    // КРОК 3: Реалізуйте конструктор та витягніть параметри з конфіга
-    // ──────────────────────────────────────────────────────────────────
-    
-    public ExampleMechanic(EnchantMeta meta) {
-        super(meta);
-        
-        // Отримайте перший trigger (найчастіше у вас буде тільки один)
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        
-        // Витягніть параметри з конфіга з дефолтними значеннями
-        exampleIntParam = params != null ? params.getInt("example_int", 10) : 10;
-        exampleDoubleParam = params != null ? params.getDouble("example_double", 0.5) : 0.5;
-        exampleStringParam = params != null ? params.getString("example_string", "default") : "default";
-        exampleBooleanParam = params != null ? params.getBoolean("example_boolean", true) : true;
+    @Override
+    public String getId() {
+        return "example_enchant";
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // КРОК 4 & 5: EventHandler методи для слухання подій та логіка
-    // ──────────────────────────────────────────────────────────────────
-    
-    /**
-     * Приклад: слухаємо PlayerInteractEvent
-     * Замініть цей метод на ті события які вам потрібні
-     */
-    @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent e) {
-        Player player = e.getPlayer();
-        ItemStack item = player.getInventory().getItemInMainHand();
-        
-        // Перевірте чи предмет має це зачарування
-        int level = levelOf(item);
-        if (level == 0) return;
-        
-        // ТУТ ВАША ЛОГІКА
-        // player.sendMessage("ExampleMechanic спрацював на рівні: " + level);
+    @Override
+    public String getName() {
+        return "Приклад Зачарування";
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Приклади інших подій які ви можете слухати:
-    // ──────────────────────────────────────────────────────────────────
-    
-    /*
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent e) {
-        // Коли гравець рухається
+    @Override
+    public String getDescription() {
+        return "Повністю завершений приклад з окремими перемикачами enabled для кожного джерела отримання.";
     }
-    
-    @EventHandler
-    public void onPlayerDamage(EntityDamageEvent e) {
-        if (!(e.getEntity() instanceof Player p)) return;
-        // Коли гравець отримує шкоду
-    }
-    
-    @EventHandler
-    public void onPlayerAttack(EntityDamageByEntityEvent e) {
-        if (!(e.getDamager() instanceof Player p)) return;
-        // Коли гравець атакує сутність
-    }
-    
-    @EventHandler
-    public void onPlayerJump(PlayerJumpEvent e) {
-        // Коли гравець стрибає (Paper only)
-    }
-    
-    @EventHandler
-    public void onPlayerFish(PlayerFishEvent e) {
-        // Коли гравець рибалить
-    }
-    
-    @EventHandler
-    public void onPlayerConsume(PlayerItemConsumeEvent e) {
-        // Коли гравець їсть/п'є предмет
-    }
-    */
 
-    // ──────────────────────────────────────────────────────────────────
-    // Корисні методи з базового класу Mechanic
-    // ──────────────────────────────────────────────────────────────────
-    
-    /*
-    // Отримайте рівень зачарування на предметі
-    int level = levelOf(itemStack);
-    
-    // Отримайте рівень зачарування що гравець носить
-    int level = levelOnPlayer(player);
-    
-    // Отримайте метаінформацію про зачарування
-    String name = meta.name();
-    int maxLevel = meta.maxLevel();
-    List<EnchantSlot> slots = meta.slots();
-    */
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD,
+                       Material.GOLDEN_SWORD, Material.DIAMOND_SWORD, Material.NETHERITE_SWORD,
+                       Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE,
+                       Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.MAINHAND);
+    }
+
+    // --- ДЖЕРЕЛА ТА ШАНСИ ---
+
+    @Override
+    public boolean isEnchantingTableAllowed() {
+        return true;
+    }
+
+    @Override
+    public double getEnchantingTableChance() {
+        return 0.12;
+    }
+
+    @Override
+    public boolean isChestLootAllowed() {
+        return true;
+    }
+
+    @Override
+    public double getChestLootChance() {
+        return 0.05;
+    }
+
+    @Override
+    public List<String> getLootChests() {
+        return List.of(
+            "minecraft:chests/end_city_treasure",
+            "minecraft:chests/ancient_city"
+        );
+    }
+
+    @Override
+    public boolean isVillagerTradeAllowed() {
+        return true;
+    }
+
+    @Override
+    public Map<String, Map<String, Object>> getVillagerTrades() {
+        return Map.of(
+            "LIBRARIAN", Map.of(
+                "level", 2,
+                "min-emeralds", 10,
+                "max-emeralds", 24
+            )
+        );
+    }
+
+    // --- ВАРТІСТЬ ТА НАЛАШТУВАННЯ ---
+
+    @Override
+    public int getAnvilBaseCost() {
+        return 8;
+    }
+
+    @Override
+    public int getAnvilCostPerLevel() {
+        return 4;
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "cooldown-seconds", 5,
+            "power-multiplier", 1.5
+        );
+    }
+
+    @EventHandler
+    public void onInteract(PlayerInteractEvent event) {
+        if (!isMechanicEnabled()) return;
+
+        Player player = event.getPlayer();
+        int cooldown = getInt("cooldown-seconds");
+        double power = getDouble("power-multiplier");
+
+        // Логіка механіки...
+    }
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// КРОК 6: Зареєструйте механіку в EnchantmentRegistry
-// ══════════════════════════════════════════════════════════════════════════════
-
-/*
-Знайдіть метод readMechanics() у EnchantmentRegistry.java та додайте:
-
-case "example_mechanic" -> new ExampleMechanic(meta);
-*/
-
-// ══════════════════════════════════════════════════════════════════════════════
-// КРОК 7: Додайте конфіг енчарту у config.yml
-// ══════════════════════════════════════════════════════════════════════════════
-
-/*
-  example_enchantment:
-    name: "Приклад Зачарування"
-    supported_items: "#enchantments:axes"  # або конкретний предмет
-    slots: [mainhand]
-    weight: 2
-    max_level: 3
-    triggers:
-      - mechanic: example_mechanic
-        example_int: 10
-        example_double: 0.5
-        example_string: "default"
-        example_boolean: true
-    sources:
-      enchanting_table: true
-      loot_tables:
-        - table: minecraft:chests/abandoned_mineshaft
-          chance: 0.1
-          min_level: 1
-          max_level: 3
-      villager_trades:
-        - { profession: librarian, villager_level: 3, min_level: 1, max_level: 3, price: 30 }
-*/

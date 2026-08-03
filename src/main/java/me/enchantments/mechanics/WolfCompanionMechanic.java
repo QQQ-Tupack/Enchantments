@@ -1,11 +1,9 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.utils.EnchantMeta;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
+import java.util.List;
+import java.util.Map;
+
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Wolf;
@@ -17,23 +15,48 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
-public final class WolfCompanionMechanic extends Mechanic implements CommandExecutor {
+public final class WolfCompanionMechanic extends Mechanic {
 
-    private final boolean protectFromOwnerDamage, protectFromOwnerProjectiles, protectSuffocation, protectNamedTarget;
-    private final String command;
-
-    public WolfCompanionMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        protectFromOwnerDamage = params != null ? params.getBoolean("protect_from_owner_damage", true) : true;
-        protectFromOwnerProjectiles = params != null ? params.getBoolean("protect_from_owner_projectiles", true) : true;
-        protectSuffocation = params != null ? params.getBoolean("protect_suffocation", true) : true;
-        protectNamedTarget = params != null ? params.getBoolean("protect_named_target", true) : true;
-        command = params != null ? params.getString("command", "pet") : "pet";
+    @Override
+    public String getId() {
+        return "wolf_companion";
     }
 
     @Override
-    public String commandName() { return command; }
+    public String getName() {
+        return "Вірна дружба";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Вовк отримує захист від випадкових атак власника";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOLF_ARMOR);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.BODY);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "protect-from-owner-damage", true,
+            "protect-from-owner-projectiles", true,
+            "protect-suffocation", true,
+            "protect-named-target", true,
+            "command", "pet"
+        );
+    }
 
     private ItemStack armor(Wolf wolf) {
         return wolf.getEquipment() == null ? null : wolf.getEquipment().getItem(EquipmentSlot.BODY);
@@ -45,19 +68,28 @@ public final class WolfCompanionMechanic extends Mechanic implements CommandExec
 
     @EventHandler
     public void onWolfAttack(EntityDamageByEntityEvent e) {
+        if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Wolf wolf) || !(e.getDamager() instanceof Player player)) return;
+        boolean protectFromOwnerDamage = getBoolean("protect-from-owner-damage");
         if (protectFromOwnerDamage && guarded(wolf) && player.equals(wolf.getOwner())) e.setCancelled(true);
     }
 
     @EventHandler
     public void onWolfTarget(EntityTargetEvent e) {
-        if (!(e.getEntity() instanceof Wolf wolf) || !guarded(wolf) || !protectNamedTarget) return;
+        if (!isMechanicEnabled()) return;
+        if (!(e.getEntity() instanceof Wolf wolf) || !guarded(wolf)) return;
+        boolean protectNamedTarget = getBoolean("protect-named-target");
+        if (!protectNamedTarget) return;
         if (e.getTarget() != null && e.getTarget().customName() != null) e.setCancelled(true);
     }
 
     @EventHandler
     public void onWolfDamage(EntityDamageEvent e) {
+        if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Wolf wolf) || !guarded(wolf)) return;
+
+        boolean protectFromOwnerProjectiles = getBoolean("protect-from-owner-projectiles");
+        boolean protectSuffocation = getBoolean("protect-suffocation");
 
         if (protectFromOwnerProjectiles && e.getCause() == EntityDamageEvent.DamageCause.PROJECTILE
                 && e instanceof EntityDamageByEntityEvent byEntity
@@ -74,18 +106,5 @@ public final class WolfCompanionMechanic extends Mechanic implements CommandExec
         e.getFrom().getEntitiesByClass(Wolf.class).stream()
                 .filter(w -> w.isTamed() && player.equals(w.getOwner()) && guarded(w) && !w.isSitting())
                 .forEach(w -> w.teleport(player.getLocation()));
-    }
-
-    @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player player)) return true;
-        boolean teleported = player.getWorld().getEntitiesByClass(Wolf.class).stream()
-                .filter(w -> w.isTamed() && player.equals(w.getOwner()) && guarded(w) && !w.isSitting())
-                .peek(w -> w.teleport(player.getLocation()))
-                .count() > 0;
-        player.sendMessage(teleported
-                ? Component.text("Вовки прикликані!", NamedTextColor.GREEN)
-                : Component.text("Немає прикликаних вовків із зачарованою бронею.", NamedTextColor.RED));
-        return true;
     }
 }

@@ -1,7 +1,6 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Arrow;
@@ -13,23 +12,50 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 public final class WolfFetchMechanic extends Mechanic {
 
-    private final double fetchRadius;
-    private final int itemAgeThreshold;
-    private final List<Material> fetchExcluded;
+    @Override
+    public String getId() {
+        return "wolf_fetch";
+    }
 
-    public WolfFetchMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        fetchRadius = params != null ? params.getDouble("radius", 50) : 50;
-        itemAgeThreshold = params != null ? params.getInt("item_age_threshold", 200) : 200;
-        fetchExcluded = params != null ? params.getStringList("excluded_items").stream()
-                .map(Material::matchMaterial).filter(m -> m != null).toList() : List.of();
+    @Override
+    public String getName() {
+        return "Хороший хлопчик";
+    }
 
+    @Override
+    public String getDescription() {
+        return "Вовк автоматично носить предмети власнику";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOLF_ARMOR);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.BODY);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "radius", 50.0,
+            "item-age-threshold", 200
+        );
+    }
+
+    @Override
+    protected void onEnable() {
         new WolfItemFetcher().runTaskTimer(Enchantments.getInstance(), 0L, 100L);
     }
 
@@ -51,8 +77,12 @@ public final class WolfFetchMechanic extends Mechanic {
         }
 
         private void fetchNearest(Player player, Wolf wolf) {
+            double fetchRadius = getDouble("radius");
+            int itemAgeThreshold = getInt("item-age-threshold");
+            List<Material> fetchExcluded = getMaterials();
+
             wolf.getWorld().getNearbyEntities(wolf.getLocation(), fetchRadius, fetchRadius, fetchRadius).stream()
-                    .filter(this::isValidItem)
+                    .filter(entity -> isValidItem(entity, itemAgeThreshold, fetchExcluded))
                     .filter(entity -> entity.getLocation().distance(player.getLocation()) >= 5)
                     .min(Comparator.comparingDouble(e -> e.getLocation().distanceSquared(wolf.getLocation())))
                     .ifPresent(entity -> {
@@ -73,10 +103,20 @@ public final class WolfFetchMechanic extends Mechanic {
                     });
         }
 
-        private boolean isValidItem(org.bukkit.entity.Entity entity) {
+        private boolean isValidItem(org.bukkit.entity.Entity entity, int itemAgeThreshold, List<Material> fetchExcluded) {
             if (entity.getTicksLived() < itemAgeThreshold) return false;
             if (entity instanceof Item item) return !fetchExcluded.contains(item.getItemStack().getType());
             return entity instanceof Arrow || entity instanceof ExperienceOrb;
+        }
+
+        private List<Material> getMaterials() {
+            String excluded = getString("excluded-items");
+            if (excluded.isEmpty()) return List.of();
+            return Arrays.stream(excluded.split(","))
+                    .map(String::trim)
+                    .map(Material::matchMaterial)
+                    .filter(m -> m != null)
+                    .toList();
         }
     }
 }

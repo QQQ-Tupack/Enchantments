@@ -1,7 +1,6 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
@@ -22,18 +21,47 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /** Нюхання контейнерів вовком - виявляє сундуки з певним предметом */
 public final class WolfSniffMechanic extends Mechanic {
 
-    private final double sniffRadius;
-    private final int sniffGlowTicks;
+    @Override
+    public String getId() {
+        return "wolf_sniff";
+    }
 
-    public WolfSniffMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        sniffRadius = params != null ? params.getDouble("radius", 50) : 50;
-        sniffGlowTicks = params != null ? params.getInt("glow_ticks", 200) : 200;
+    @Override
+    public String getName() {
+        return "Гострий нюх";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє вовку знаходити контейнери з певним предметом";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.WOLF_ARMOR);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.BODY);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "radius", 50.0,
+            "glow-ticks", 200
+        );
     }
 
     private ItemStack armor(Wolf wolf) {
@@ -46,6 +74,7 @@ public final class WolfSniffMechanic extends Mechanic {
 
     @EventHandler
     public void onSniff(PlayerInteractEntityEvent e) {
+        if (!isMechanicEnabled()) return;
         if (!(e.getRightClicked() instanceof Wolf wolf) || !guarded(wolf)) return;
         Player player = e.getPlayer();
         if (!wolf.isTamed() || !wolf.getOwner().equals(player)) return;
@@ -60,6 +89,8 @@ public final class WolfSniffMechanic extends Mechanic {
     }
 
     private void sniff(Player player, Wolf wolf, Material target) {
+        double sniffRadius = getDouble("radius");
+        int sniffGlowTicks = getInt("glow-ticks");
         World world = wolf.getWorld();
         world.playSound(wolf.getLocation(), "entity.sniffer.sniffing", 1.0f, 1.4f);
         Location center = player.getLocation();

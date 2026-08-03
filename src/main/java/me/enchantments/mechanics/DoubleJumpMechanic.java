@@ -3,6 +3,7 @@ package me.enchantments.mechanics;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -14,11 +15,7 @@ import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerJumpEvent;
 
-import me.enchantments.utils.EnchantMeta;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public final class DoubleJumpMechanic extends Mechanic {
 
@@ -29,23 +26,54 @@ public final class DoubleJumpMechanic extends Mechanic {
 
     private static final long DOUBLE_TAP_WINDOW_MS = 350;
 
-    private final Scaled velocityY;
-    private final double forwardMult;
-    private final double foodCost;
-    private final int minFood;
-    private final double safeFallHeight;
-
     private final Map<UUID, JumpState> jumps = new HashMap<>();
 
-    public DoubleJumpMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        velocityY = new Scaled(params != null ? params.getDouble("velocity_y", 0.6) : 0.6, 
-                               params != null ? params.getDouble("velocity_y_per_level", 0.1) : 0.1);
-        forwardMult = params != null ? params.getDouble("forward_mult", 0.5) : 0.5;
-        foodCost = params != null ? params.getDouble("food_cost", 0.1) : 0.1;
-        minFood = params != null ? params.getInt("min_food", 7) : 7;
-        safeFallHeight = params != null ? params.getDouble("safe_fall_height", 3.0) : 3.0;
+    @Override
+    public String getId() {
+        return "double_jump";
+    }
+
+    @Override
+    public String getName() {
+        return "Подвійний стрибок";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє гравцю виконати подвійний стрибок у повітрі";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return false;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.LEATHER_BOOTS, Material.CHAINMAIL_BOOTS, Material.IRON_BOOTS, 
+                       Material.GOLDEN_BOOTS, Material.DIAMOND_BOOTS, Material.NETHERITE_BOOTS);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.FEET);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "velocity-y", 0.6,
+            "velocity-y-per-level", 0.1,
+            "forward-mult", 0.5,
+            "food-cost", 0.1,
+            "min-food", 7,
+            "safe-fall-height", 3.0
+        );
     }
 
     @EventHandler
@@ -60,6 +88,7 @@ public final class DoubleJumpMechanic extends Mechanic {
 
     @EventHandler
     public void onInput(PlayerInputEvent event) {
+        if (!isMechanicEnabled()) return;
         Player player = event.getPlayer();
         JumpState state = jumps.get(player.getUniqueId());
         if (state == null || state.used() || player.isOnGround()) return;
@@ -71,6 +100,7 @@ public final class DoubleJumpMechanic extends Mechanic {
         if (state.spaceHeld()) return;
         if (System.currentTimeMillis() - state.jumpedAt() > DOUBLE_TAP_WINDOW_MS) return;
 
+        int minFood = getInt("min-food");
         if (player.getFoodLevel() <= minFood) {
             player.spigot().sendMessage(ChatMessageType.ACTION_BAR,
                     new TextComponent("§cВи надто зголодніли для подвійного стрибка!"));
@@ -83,6 +113,7 @@ public final class DoubleJumpMechanic extends Mechanic {
     public void onFallDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player) || event.getCause() != EntityDamageEvent.DamageCause.FALL) return;
         JumpState state = jumps.remove(player.getUniqueId());
+        double safeFallHeight = getDouble("safe-fall-height");
         if (state != null && state.used() && state.startY() - player.getLocation().getY() < safeFallHeight) {
             event.setCancelled(true);
         }
@@ -100,8 +131,12 @@ public final class DoubleJumpMechanic extends Mechanic {
     }
 
     private void jump(Player player, JumpState state) {
+        double velocityY = getDouble("velocity-y") + (getDouble("velocity-y-per-level") * (state.level() - 1));
+        double forwardMult = getDouble("forward-mult");
+        double foodCost = getDouble("food-cost");
+
         Vector direction = player.getLocation().getDirection();
-        player.setVelocity(direction.multiply(forwardMult).setY(velocityY.at(state.level())));
+        player.setVelocity(direction.multiply(forwardMult).setY(velocityY));
         player.setSprinting(true);
         player.setFallDistance(0f);
         jumps.put(player.getUniqueId(), state.consumed());

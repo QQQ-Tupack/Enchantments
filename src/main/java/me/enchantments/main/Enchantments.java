@@ -1,10 +1,24 @@
 package me.enchantments.main;
 
-import me.enchantments.listeners.GlintUpdateListener;
 import me.enchantments.mechanics.ParryMechanic;
-import me.enchantments.utils.DatapackGenerator;
-import me.enchantments.utils.EnchantmentRegistry;
-import me.enchantments.utils.SourceInjector;
+import me.enchantments.mechanics.SaturationMechanic;
+import me.enchantments.mechanics.SleepRestoreMechanic;
+import me.enchantments.mechanics.VoidRescueMechanic;
+import me.enchantments.mechanics.WolfCompanionMechanic;
+import me.enchantments.mechanics.WolfFetchMechanic;
+import me.enchantments.mechanics.WolfSniffMechanic;
+import me.enchantments.listeners.GlintUpdateListener;
+import me.enchantments.listeners.SourceInjector;
+import me.enchantments.mechanics.AxeCleaveMechanic;
+import me.enchantments.mechanics.AxePullMechanic;
+import me.enchantments.mechanics.AxeThrowMechanic;
+import me.enchantments.mechanics.DoubleJumpMechanic;
+import me.enchantments.mechanics.FireWardMechanic;
+import me.enchantments.mechanics.GrapplingHookMechanic;
+import me.enchantments.mechanics.HorseCompanionMechanic;
+import me.enchantments.mechanics.Mechanic;
+import me.enchantments.mechanics.ParachuteMechanic;
+
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -21,15 +35,32 @@ public final class Enchantments extends JavaPlugin {
         instance = this;
 
         new Config().register();
+
+        new DoubleJumpMechanic().register();
+        new AxeThrowMechanic().register();
+        new AxePullMechanic().register();
+        new AxeCleaveMechanic().register();
+        new ParryMechanic().register();
+        new ParachuteMechanic().register();
+        new GrapplingHookMechanic().register();
+        new WolfCompanionMechanic().register();
+        new WolfSniffMechanic().register();
+        new WolfFetchMechanic().register();
+        new HorseCompanionMechanic().register();
+        new VoidRescueMechanic().register();
+        new SleepRestoreMechanic().register();
+        new FireWardMechanic().register();
+        new SaturationMechanic().register();
+        
         DatapackGenerator.install();
-        EnchantmentRegistry.registerAll(this);
+        
         Bukkit.getPluginManager().registerEvents(new SourceInjector(), this);
         Bukkit.getPluginManager().registerEvents(new GlintUpdateListener(), this);
     }
 
     @Override
     public void onDisable() {
-        EnchantmentRegistry.mechanics().stream()
+        Mechanic.getAll().stream()
                 .filter(ParryMechanic.class::isInstance)
                 .map(ParryMechanic.class::cast)
                 .forEach(ParryMechanic::shutdown);

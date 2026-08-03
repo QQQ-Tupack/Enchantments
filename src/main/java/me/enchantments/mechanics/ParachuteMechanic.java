@@ -1,8 +1,8 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.utils.EnchantMeta;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Chicken;
@@ -20,26 +20,63 @@ import java.util.stream.Stream;
 
 public final class ParachuteMechanic extends Mechanic {
 
-    private final int durationTicks, cooldownTicks;
-    private final double fallDistanceTrigger, descendSpeed;
-
     private final Map<UUID, List<Chicken>> active = new HashMap<>();
     private final Map<UUID, Long> cooldownUntil = new HashMap<>();
 
-    public ParachuteMechanic(EnchantMeta meta) {
-        super(meta);
-        var params = meta.triggers().isEmpty() ? null : meta.triggers().get(0);
-        durationTicks = params != null ? params.getInt("duration_ticks", 100) : 100;
-        cooldownTicks = params != null ? params.getInt("cooldown_ticks", 200) : 200;
-        fallDistanceTrigger = params != null ? params.getDouble("fall_distance_trigger", 3.0) : 3.0;
-        descendSpeed = params != null ? params.getDouble("descend_speed", 0.3) : 0.3;
+    @Override
+    public String getId() {
+        return "parachute";
+    }
+
+    @Override
+    public String getName() {
+        return "Парашут";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Дозволяє керованого опускатися на парашуті";
+    }
+
+    @Override
+    public int getMaxLevel() {
+        return 3;
+    }
+
+    @Override
+    protected boolean hideEnchantmentGlintDefault() {
+        return false;
+    }
+
+    @Override
+    public List<Material> getSupportedItems() {
+        return List.of(Material.LEATHER_CHESTPLATE, Material.CHAINMAIL_CHESTPLATE, Material.IRON_CHESTPLATE, Material.COPPER_CHESTPLATE,
+                       Material.GOLDEN_CHESTPLATE, Material.DIAMOND_CHESTPLATE, Material.NETHERITE_CHESTPLATE);
+    }
+
+    @Override
+    public List<EnchantSlot> getSlots() {
+        return List.of(EnchantSlot.CHEST);
+    }
+
+    @Override
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "duration-ticks", 100,
+            "cooldown-ticks", 200,
+            "fall-distance-trigger", 3.0,
+            "descend-speed", 0.3
+        );
     }
 
     @EventHandler
     public void onSneak(PlayerToggleSneakEvent e) {
+        if (!isMechanicEnabled()) return;
         Player p = e.getPlayer();
         if (p.isFlying() || p.getGameMode() != GameMode.SURVIVAL || p.isOnGround()) return;
         if (p.getLocation().subtract(0, 1, 0).getBlock().getType().isSolid()) return;
+        
+        double fallDistanceTrigger = getDouble("fall-distance-trigger");
         if (p.getFallDistance() <= fallDistanceTrigger) return;
         if (levelOf(p.getInventory().getChestplate()) == 0) return;
         open(p);
@@ -58,6 +95,10 @@ public final class ParachuteMechanic extends Mechanic {
         long now = System.currentTimeMillis();
         Long readyAt = cooldownUntil.get(uid);
         if (readyAt != null && readyAt > now) return;
+
+        int durationTicks = getInt("duration-ticks");
+        int cooldownTicks = getInt("cooldown-ticks");
+        double descendSpeed = getDouble("descend-speed");
 
         p.setMetadata("parachute", new FixedMetadataValue(Enchantments.getInstance(), true));
         List<Chicken> chickens = Stream.of(0, 1, -1).map(x -> spawn(p, x)).collect(Collectors.toList());
