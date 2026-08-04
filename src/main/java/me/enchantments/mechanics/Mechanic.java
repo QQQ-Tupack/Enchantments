@@ -372,16 +372,12 @@ public abstract class Mechanic implements Listener {
     //   ДОПОМІЖНІ МЕТОДИ
     // ==========================================
 
-    private Enchantment cachedEnchantment;
-
     public int levelOf(ItemStack item) {
         if (item == null) return 0;
-        if (cachedEnchantment == null) {
-            cachedEnchantment = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT)
-                    .get(NamespacedKey.fromString("enchantments:" + getId().toLowerCase()));
-            if (cachedEnchantment == null) return 0;
-        }
-        return item.getEnchantmentLevel(cachedEnchantment);
+        Enchantment ench = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT)
+                .get(NamespacedKey.fromString("enchantments:" + getId().toLowerCase()));
+        if (ench == null) return 0;
+        return item.getEnchantmentLevel(ench);
     }
 
     public int levelOnPlayer(Player player) {

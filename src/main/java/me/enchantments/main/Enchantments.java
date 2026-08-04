@@ -4,14 +4,19 @@ import me.enchantments.mechanics.ParryMechanic;
 import me.enchantments.mechanics.PhantomVeilMechanic;
 import me.enchantments.mechanics.RadiantAuraMechanic;
 import me.enchantments.mechanics.SaturationBonusMechanic;
+import me.enchantments.mechanics.SculkHarpoonMechanic;
 import me.enchantments.mechanics.SleepRestoreMechanic;
 import me.enchantments.mechanics.SoaringBoundMechanic;
+import me.enchantments.mechanics.SoulStormMechanic;
+import me.enchantments.mechanics.SoulboundMechanic;
 import me.enchantments.mechanics.StoneSkinMechanic;
 import me.enchantments.mechanics.SwiftLaborMechanic;
 import me.enchantments.mechanics.TitanMightMechanic;
 import me.enchantments.mechanics.UmbralSightMechanic;
 import me.enchantments.mechanics.VitalSatietyMechanic;
 import me.enchantments.mechanics.VoidRescueMechanic;
+import me.enchantments.mechanics.WardenEchoMechanic;
+import me.enchantments.mechanics.WitherBarrageMechanic;
 import me.enchantments.mechanics.WolfCompanionMechanic;
 import me.enchantments.mechanics.WolfFetchMechanic;
 import me.enchantments.mechanics.WolfSniffMechanic;
@@ -21,13 +26,17 @@ import me.enchantments.mechanics.AbyssalBreathMechanic;
 import me.enchantments.mechanics.AxeCleaveMechanic;
 import me.enchantments.mechanics.AxePullMechanic;
 import me.enchantments.mechanics.AxeThrowMechanic;
+import me.enchantments.mechanics.BoneLegionMechanic;
 import me.enchantments.mechanics.DoubleJumpMechanic;
+import me.enchantments.mechanics.EarthshatterMechanic;
+import me.enchantments.mechanics.EndBreathMechanic;
 import me.enchantments.mechanics.FireWardMechanic;
 import me.enchantments.mechanics.FortunesFavorMechanic;
 import me.enchantments.mechanics.GaleDescentMechanic;
 import me.enchantments.mechanics.GaleStrideMechanic;
 import me.enchantments.mechanics.GrapplingHookMechanic;
 import me.enchantments.mechanics.HorseCompanionMechanic;
+import me.enchantments.mechanics.InfernalBlastMechanic;
 import me.enchantments.mechanics.InfernalShieldMechanic;
 import me.enchantments.mechanics.Mechanic;
 import me.enchantments.mechanics.OceanGraceMechanic;
@@ -85,7 +94,18 @@ public final class Enchantments extends JavaPlugin {
         new UmbralSightMechanic().register();
         new PhantomVeilMechanic().register();
         new SoaringBoundMechanic().register();
+        
+        new SoulboundMechanic().register();
 
+        new EndBreathMechanic().register();
+        new EarthshatterMechanic().register();
+        new SoulStormMechanic().register();
+        new WardenEchoMechanic().register();
+        new WitherBarrageMechanic().register();
+        new InfernalBlastMechanic().register();
+        new SculkHarpoonMechanic().register();
+        new BoneLegionMechanic().register();
+        
         DatapackGenerator.install();
 
         Bukkit.getPluginManager().registerEvents(new SourceInjector(), this);
