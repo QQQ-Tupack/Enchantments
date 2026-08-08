@@ -15,14 +15,15 @@ import me.enchantments.mechanics.TitanMightMechanic;
 import me.enchantments.mechanics.UmbralSightMechanic;
 import me.enchantments.mechanics.VitalSatietyMechanic;
 import me.enchantments.mechanics.VoidRescueMechanic;
-import me.enchantments.mechanics.WardenEchoMechanic;
 import me.enchantments.mechanics.WitherBarrageMechanic;
+import me.enchantments.mechanics.WitherShadowMechanic;
 import me.enchantments.mechanics.WolfCompanionMechanic;
 import me.enchantments.mechanics.WolfFetchMechanic;
 import me.enchantments.mechanics.WolfSniffMechanic;
 import me.enchantments.listeners.GlintUpdateListener;
 import me.enchantments.listeners.SourceInjector;
 import me.enchantments.mechanics.AbyssalBreathMechanic;
+import me.enchantments.mechanics.AbyssalGazeMechanic;
 import me.enchantments.mechanics.AxeCleaveMechanic;
 import me.enchantments.mechanics.AxePullMechanic;
 import me.enchantments.mechanics.AxeThrowMechanic;
@@ -100,11 +101,14 @@ public final class Enchantments extends JavaPlugin {
         new EndBreathMechanic().register();
         new EarthshatterMechanic().register();
         new SoulStormMechanic().register();
-        new WardenEchoMechanic().register();
         new WitherBarrageMechanic().register();
         new InfernalBlastMechanic().register();
         new SculkHarpoonMechanic().register();
         new BoneLegionMechanic().register();
+        
+
+        new WitherShadowMechanic().register();
+        new AbyssalGazeMechanic().register();
         
         DatapackGenerator.install();
 

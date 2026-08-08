@@ -30,7 +30,10 @@ public final class SourceInjector implements Listener {
     @EventHandler
     public void onLoot(LootGenerateEvent event) {
         if (event.getLootTable() == null) return;
-        String table = event.getLootTable().getKey().toString();
+
+        NamespacedKey key = event.getLootTable().getKey();
+        if (!key.getKey().startsWith("chests/")) return;   // тільки скрині, не риболовля/дропи блоків
+        String table = key.toString();
 
         for (Mechanic mechanic : Mechanic.getAll()) {
             if (!mechanic.isMechanicEnabled()) continue;
@@ -40,7 +43,7 @@ public final class SourceInjector implements Listener {
             if (!config.getBoolean("obtaining.chests.enabled", true)) continue;
 
             List<String> chests = config.getStringList("obtaining.chests.list");
-            if (chests.isEmpty() || !chests.contains(table)) continue;
+            if (!chests.isEmpty() && !chests.contains(table)) continue;   // порожній = будь-яка скриня
 
             double chance = config.getDouble("obtaining.chests.chance", 0.05);
             if (random.nextDouble() >= chance) continue;

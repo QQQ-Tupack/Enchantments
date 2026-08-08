@@ -5,8 +5,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
@@ -137,6 +139,17 @@ public final class PhantomVeilMechanic extends Mechanic {
         }
         if (veiled.contains(id)) {
             player.getWorld().spawnParticle(Particle.SMOKE, player.getLocation().add(0, 0.2, 0), 2, 0.3, 0.05, 0.3, 0);
+            forget(player);
+        }
+    }
+
+    /** Моби, що вже йшли на гравця до появи вуалі, події таргету не викликають — знімаємо ціль вручну. */
+    private void forget(Player player) {
+        double radius = getDouble("radius");
+        for (Entity nearby : player.getNearbyEntities(radius, radius, radius)) {
+            if (nearby instanceof Mob mob && player.equals(mob.getTarget())) {
+                mob.setTarget(null);
+            }
         }
     }
 
@@ -147,17 +160,33 @@ public final class PhantomVeilMechanic extends Mechanic {
         if (!veiled.contains(player.getUniqueId())) return;
         if (e.getReason() == EntityTargetEvent.TargetReason.TARGET_ATTACKED_ENTITY) return; // вдарив — сам винен
         if (levelOnPlayer(player) == 0) return;
+        if (!e.getEntity().getWorld().equals(player.getWorld())) return;
 
         double radius = getDouble("radius");
         if (e.getEntity().getLocation().distanceSquared(player.getLocation()) > radius * radius) return;
 
+        e.setTarget(null);
         e.setCancelled(true);
-        if (e.getEntity() instanceof Mob mob) mob.setTarget(null);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onAttack(EntityDamageByEntityEvent e) {
-        if (e.getDamager() instanceof Player player) dropVeil(player);
+        if (e.getDamager() instanceof Player player) {
+            dropVeil(player);
+            return;
+        }
+        if (!isMechanicEnabled()) return;
+        if (!(e.getEntity() instanceof Player player)) return;
+        if (!veiled.contains(player.getUniqueId())) return;
+
+        // моб, який усе одно дістав до гравця — удар не проходить, ціль скидається
+        Entity source = e.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof Entity shooter ? shooter : e.getDamager();
+
+        if (source instanceof Mob mob) {
+            mob.setTarget(null);
+            e.setCancelled(true);
+        }
     }
 
     @EventHandler

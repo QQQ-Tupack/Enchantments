@@ -5,15 +5,19 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.WitherSkull;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityExplodeEvent;
-import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -26,7 +30,7 @@ import java.util.Map;
 /**
  * Зброя візера: тавро й детонація.
  *
- * Повний натяг випускає череп, який сам доводить до цілі. Кожне влучання лишає тавро;
+ * ПКМ випускає череп, який сам доводить до цілі. Кожне влучання лишає тавро;
  * на третьому тавра зриваються й вибухають, розносячи Іссушення на всіх поруч.
  *
  * Тавра рахуються на самій жертві, тому кілька гравців можуть добивати одну ціль разом,
@@ -49,7 +53,7 @@ public final class WitherBarrageMechanic extends Mechanic {
 
     @Override
     public String getDescription() {
-        return "Випускає череп, що переслідує ціль; три влучання зривають тавра вибухом";
+        return "ПКМ випускає череп, що переслідує ціль; три влучання зривають тавра вибухом";
     }
 
     @Override
@@ -59,7 +63,14 @@ public final class WitherBarrageMechanic extends Mechanic {
 
     @Override
     public List<Material> getSupportedItems() {
-        return List.of(Material.BOW, Material.CROSSBOW);
+        return List.of(
+                Material.NETHERITE_SWORD,
+                Material.DIAMOND_SWORD,
+                Material.IRON_SWORD,
+                Material.GOLDEN_SWORD,
+                Material.STONE_SWORD,
+                Material.WOODEN_SWORD
+        );
     }
 
     @Override
@@ -91,18 +102,28 @@ public final class WitherBarrageMechanic extends Mechanic {
     //   ПОСТРІЛ
     // ==========================================
 
-    @EventHandler(ignoreCancelled = true)
-    public void onShoot(EntityShootBowEvent e) {
+    @EventHandler
+    public void onUse(PlayerInteractEvent e) {
         if (!isMechanicEnabled()) return;
-        if (!(e.getEntity() instanceof Player player)) return;
+        if (e.getHand() != EquipmentSlot.HAND) return;
+        if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
 
-        int level = levelOf(e.getBow());
-        if (level == 0 || e.getBow() == null) return;
-        if (e.getForce() < 0.95f) return;
-        if (player.hasCooldown(e.getBow().getType())) return;
+        Player player = e.getPlayer();
+        ItemStack weapon = e.getItem();
+        if (weapon == null) return;
 
-        e.setCancelled(true); // стрілу замінює череп
-        player.setCooldown(e.getBow().getType(), Math.max(20, getInt("cooldown-ticks") - (level - 1) * 10));
+        int level = levelOf(weapon);
+        if (level == 0) return;
+
+        // клік по скрині, дверях тощо лишаємо звичайною взаємодією, якщо гравець не крадеться
+        Block clicked = e.getClickedBlock();
+        if (e.getAction() == Action.RIGHT_CLICK_BLOCK && clicked != null
+                && clicked.getType().isInteractable() && !player.isSneaking()) return;
+
+        if (player.hasCooldown(weapon)) return;
+
+        e.setCancelled(true);
+        player.setCooldown(weapon, Math.max(20, getInt("cooldown-ticks") - (level - 1) * 10));
 
         WitherSkull skull = player.launchProjectile(WitherSkull.class,
                 player.getLocation().getDirection().multiply(getDouble("skull-speed")));

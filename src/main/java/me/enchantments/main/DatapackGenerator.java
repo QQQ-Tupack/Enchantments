@@ -38,9 +38,9 @@ public final class DatapackGenerator {
         files.put("data/minecraft/tags/enchantment/in_enchanting_table.json",
                 tagOf(mechanics, m -> flag(m, "obtaining.enchanting-table.enabled")));
 
-        files.put("data/minecraft/tags/enchantment/on_random_loot.json",
-                tagOf(mechanics, m -> flag(m, "obtaining.chests.enabled")
-                        && m.getConfig().getStringList("obtaining.chests.list").isEmpty()));
+    //    files.put("data/minecraft/tags/enchantment/on_random_loot.json",
+    //            tagOf(mechanics, m -> flag(m, "obtaining.chests.enabled")
+    //                    && m.getConfig().getStringList("obtaining.chests.list").isEmpty()));
 
         files.put("data/minecraft/tags/enchantment/tradeable.json",
                 tagOf(mechanics, m -> flag(m, "obtaining.villagers.enabled")
@@ -100,8 +100,8 @@ public final class DatapackGenerator {
         return """
                 {
                   "pack": {
-                    "pack_format": 88,
-                    "supported_formats": { "min_inclusive": 48, "max_inclusive": 999 },
+                    "min_format": 88,
+                    "max_format": 999,
                     "description": "Enchantments"
                   }
                 }
