@@ -15,6 +15,8 @@ import org.bukkit.util.Vector;
 
 import com.destroystokyo.paper.event.player.PlayerJumpEvent;
 
+import me.enchantments.main.Mechanic;
+
 import java.util.*;
 
 public final class DoubleJumpMechanic extends Mechanic {

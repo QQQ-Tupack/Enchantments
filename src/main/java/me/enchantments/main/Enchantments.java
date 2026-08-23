@@ -1,26 +1,11 @@
 package me.enchantments.main;
 
-import me.enchantments.mechanics.ParryMechanic;
-import me.enchantments.mechanics.PhantomVeilMechanic;
-import me.enchantments.mechanics.RadiantAuraMechanic;
-import me.enchantments.mechanics.SaturationBonusMechanic;
-import me.enchantments.mechanics.SculkHarpoonMechanic;
-import me.enchantments.mechanics.SleepRestoreMechanic;
-import me.enchantments.mechanics.SoaringBoundMechanic;
-import me.enchantments.mechanics.SoulStormMechanic;
-import me.enchantments.mechanics.SoulboundMechanic;
-import me.enchantments.mechanics.StoneSkinMechanic;
-import me.enchantments.mechanics.SwiftLaborMechanic;
-import me.enchantments.mechanics.TitanMightMechanic;
-import me.enchantments.mechanics.UmbralSightMechanic;
-import me.enchantments.mechanics.VitalSatietyMechanic;
-import me.enchantments.mechanics.VoidRescueMechanic;
-import me.enchantments.mechanics.WitherBarrageMechanic;
-import me.enchantments.mechanics.WitherShadowMechanic;
-import me.enchantments.mechanics.WolfCompanionMechanic;
-import me.enchantments.mechanics.WolfFetchMechanic;
-import me.enchantments.mechanics.WolfSniffMechanic;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import me.enchantments.listeners.EnchantBookInfoHandler;
 import me.enchantments.listeners.GlintUpdateListener;
+import me.enchantments.listeners.GrindstoneListener;
 import me.enchantments.listeners.SourceInjector;
 import me.enchantments.mechanics.AbyssalBreathMechanic;
 import me.enchantments.mechanics.AbyssalGazeMechanic;
@@ -36,15 +21,34 @@ import me.enchantments.mechanics.FortunesFavorMechanic;
 import me.enchantments.mechanics.GaleDescentMechanic;
 import me.enchantments.mechanics.GaleStrideMechanic;
 import me.enchantments.mechanics.GrapplingHookMechanic;
+import me.enchantments.mechanics.HaloWardMechanic;
 import me.enchantments.mechanics.HorseCompanionMechanic;
 import me.enchantments.mechanics.InfernalBlastMechanic;
-import me.enchantments.mechanics.InfernalShieldMechanic;
-import me.enchantments.mechanics.Mechanic;
+import me.enchantments.mechanics.JesterMechanic;
 import me.enchantments.mechanics.OceanGraceMechanic;
 import me.enchantments.mechanics.ParachuteMechanic;
-
-import org.bukkit.Bukkit;
-import org.bukkit.plugin.java.JavaPlugin;
+import me.enchantments.mechanics.ParryMechanic;
+import me.enchantments.mechanics.PhantomVeilMechanic;
+import me.enchantments.mechanics.QuickdrawMechanic;
+import me.enchantments.mechanics.RadiantAuraMechanic;
+import me.enchantments.mechanics.SculkHarpoonMechanic;
+import me.enchantments.mechanics.SleepRestoreMechanic;
+import me.enchantments.mechanics.SlipstreamMechanic;
+import me.enchantments.mechanics.SoulStormMechanic;
+import me.enchantments.mechanics.SoulboundMechanic;
+import me.enchantments.mechanics.SwiftLaborMechanic;
+import me.enchantments.mechanics.ThornGraspMechanic;
+import me.enchantments.mechanics.TreasureSenseMechanic;
+import me.enchantments.mechanics.UmbralSightMechanic;
+import me.enchantments.mechanics.VitalSatietyMechanic;
+import me.enchantments.mechanics.VoidRescueMechanic;
+import me.enchantments.mechanics.WealthMechanic;
+import me.enchantments.mechanics.WitchBrewMechanic;
+import me.enchantments.mechanics.WitherBarrageMechanic;
+import me.enchantments.mechanics.WitherShadowMechanic;
+import me.enchantments.mechanics.WolfCompanionMechanic;
+import me.enchantments.mechanics.WolfFetchMechanic;
+import me.enchantments.mechanics.WolfSniffMechanic;
 
 public final class Enchantments extends JavaPlugin {
 
@@ -75,16 +79,11 @@ public final class Enchantments extends JavaPlugin {
         new SleepRestoreMechanic().register();
         new FireWardMechanic().register();
 
-        new InfernalShieldMechanic().register();
-        new StoneSkinMechanic().register();
-
-        new SaturationBonusMechanic().register();
         new VitalSatietyMechanic().register();
 
         new FortunesFavorMechanic().register();
         new SwiftLaborMechanic().register();
 
-        new TitanMightMechanic().register();
         new GaleStrideMechanic().register();
         new GaleDescentMechanic().register();
         new RadiantAuraMechanic().register();
@@ -94,7 +93,6 @@ public final class Enchantments extends JavaPlugin {
 
         new UmbralSightMechanic().register();
         new PhantomVeilMechanic().register();
-        new SoaringBoundMechanic().register();
         
         new SoulboundMechanic().register();
 
@@ -110,10 +108,21 @@ public final class Enchantments extends JavaPlugin {
         new WitherShadowMechanic().register();
         new AbyssalGazeMechanic().register();
         
+        new WitchBrewMechanic().register();
+        new SlipstreamMechanic().register();
+        new TreasureSenseMechanic().register();
+        new QuickdrawMechanic().register();
+        new JesterMechanic().register();
+        new ThornGraspMechanic().register();
+        new HaloWardMechanic().register();
+        new WealthMechanic().register();
+        
         DatapackGenerator.install();
 
         Bukkit.getPluginManager().registerEvents(new SourceInjector(), this);
         Bukkit.getPluginManager().registerEvents(new GlintUpdateListener(), this);
+        Bukkit.getPluginManager().registerEvents(new GrindstoneListener(), this);
+        Bukkit.getPluginManager().registerEvents(new EnchantBookInfoHandler(), this);
     }
 
     @Override

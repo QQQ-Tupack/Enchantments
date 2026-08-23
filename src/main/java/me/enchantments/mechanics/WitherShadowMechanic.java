@@ -13,11 +13,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
+
+import me.enchantments.main.Mechanic;
 
 import java.util.HashSet;
 import java.util.List;
@@ -25,21 +26,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Тінь згасання. Удар мечем зриває з ворога тінь — і вона лишається на землі.
- *
- * Далі тінь повзе за жертвою сама: не по прямій, а по поверхні — обходить кути, піднімається
- * на блок, стікає в яму, але не заходить на воду й не долає стіну вище одного блока.
- * Наздогнала — руки з-під землі тримають жертву на місці, потім слід зривається іссушенням.
- *
- * Ландшафт не змінюється взагалі: чорний слід — це sendBlockChange, який сам згасає.
- */
 public final class WitherShadowMechanic extends Mechanic {
 
-    /** Одна тінь на ціль: інакше юрба гравців застеляє арену соул-соілом. */
     private static final Set<UUID> HUNTED = new HashSet<>();
 
-    /** Вісім напрямків — діагоналі й дають обхід кутів. */
     private static final int[][] AROUND = {
         {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
     };
@@ -79,7 +69,7 @@ public final class WitherShadowMechanic extends Mechanic {
     public Map<String, Object> getDefaults() {
         return Map.of(
             "cooldown-ticks", 160,
-            "step-ticks", 4,          // 5 блоків/с — від спринту втекти можна, від бігу вже ні
+            "step-ticks", 4,
             "max-steps", 70,
             "lose-range", 26.0,
             "grab-ticks", 30,
@@ -94,10 +84,7 @@ public final class WitherShadowMechanic extends Mechanic {
     @Override public boolean isChestLootAllowed() { return false; }
     @Override public boolean isVillagerTradeAllowed() { return false; }
     @Override public int getAnvilBaseCost() { return 28; }
-
-    // ==========================================
-    //   ЗРИВ ТІНІ
-    // ==========================================
+    @Override protected boolean grindstoneRemovableDefault() { return false; }
 
     @EventHandler(ignoreCancelled = true)
     public void onHit(EntityDamageByEntityEvent e) {
@@ -126,10 +113,6 @@ public final class WitherShadowMechanic extends Mechanic {
         paint(start);
         new Shadow(player, prey, level, start).runTaskTimer(getPlugin(), 10L, 1L); // піврядка форе жертві
     }
-
-    // ==========================================
-    //   ПЕРЕСЛІДУВАННЯ
-    // ==========================================
 
     private final class Shadow extends BukkitRunnable {
 
@@ -183,7 +166,7 @@ public final class WitherShadowMechanic extends Mechanic {
             }
 
             Block next = nextStep();
-            if (next == null) { // загнали у воду чи в стіну — тінь розсіюється
+            if (next == null) {
                 dissipate();
                 return;
             }
@@ -191,7 +174,6 @@ public final class WitherShadowMechanic extends Mechanic {
             paint(at);
         }
 
-        /** Хапає тільки з-під ніг: якщо жертва вилізла на два блоки вище — тінь ще повзе, але дістати не може. */
         private boolean reached() {
             Location center = at.getLocation().add(0.5, 1, 0.5);
             double radius = getDouble("grab-radius");
@@ -201,7 +183,6 @@ public final class WitherShadowMechanic extends Mechanic {
             return dx * dx + dz * dz <= radius * radius && Math.abs(dy) <= 2.0;
         }
 
-        /** Крок туди, де ближче до цілі: підйом на блок, спуск на два, вода — стіна. */
         private Block nextStep() {
             Location goal = prey.getLocation();
             double best = distance(at, goal);
@@ -233,10 +214,6 @@ public final class WitherShadowMechanic extends Mechanic {
             top.getWorld().spawnParticle(Particle.SMOKE, top, 2, 0.25, 0.02, 0.25, 0.004);
         }
 
-        // ==========================================
-        //   ЗАХВАТ
-        // ==========================================
-
         private void grab() {
             holding = true;
             World world = prey.getWorld();
@@ -245,7 +222,7 @@ public final class WitherShadowMechanic extends Mechanic {
             world.playSound(feet, Sound.BLOCK_SOUL_SAND_BREAK, 1.1f, 0.5f);
             world.playSound(feet, Sound.ENTITY_WITHER_SHOOT, 0.6f, 0.5f);
 
-            for (int i = 0; i < 12; i++) { // руки з-під землі
+            for (int i = 0; i < 12; i++) {
                 double angle = Math.PI * 2 * i / 12;
                 world.spawnParticle(Particle.SOUL,
                         feet.clone().add(Math.cos(angle) * 0.6, 0.05, Math.sin(angle) * 0.6),
@@ -289,11 +266,6 @@ public final class WitherShadowMechanic extends Mechanic {
         }
     }
 
-    // ==========================================
-    //   СЛІД
-    // ==========================================
-
-    /** Поверхня під точкою: підйом максимум на блок, спуск на два, під водою поверхні нема. */
     private Block surfaceAt(Location at, int fromY) {
         World world = at.getWorld();
         for (int dy = 1; dy >= -2; dy--) {
@@ -307,7 +279,6 @@ public final class WitherShadowMechanic extends Mechanic {
         return null;
     }
 
-    /** Чорний слід малюється тільки клієнту й сам згасає — світ лишається цілим. */
     private void paint(Block block) {
         BlockData original = block.getBlockData();
         BlockData shade = Material.SOUL_SOIL.createBlockData();

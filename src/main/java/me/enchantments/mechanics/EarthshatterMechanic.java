@@ -4,19 +4,16 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
+
+import me.enchantments.main.Mechanic;
 
 import java.util.HashSet;
 import java.util.List;
@@ -24,13 +21,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Розкол землі. Гравець злітає вгору, а приземлення жене вперед розлом на десяток блоків:
- * земля тріскає, з розлому б'є вогонь, усе на шляху відкидає й підпалює.
- *
- * Ландшафт не руйнується: розжарені тріщини показуються клієнту й самі згасають,
- * а зі справжніх змін лишається тільки випалена до землі трава, яка з часом заростає.
- */
 public final class EarthshatterMechanic extends Mechanic {
 
     private static final Set<Material> SCORCHABLE = Set.of(
@@ -80,7 +70,8 @@ public final class EarthshatterMechanic extends Mechanic {
             "damage-per-fall-block", 0.7,
             "max-damage", 26.0,
             "burn-seconds", 5,
-            "crack-fade-ticks", 100
+            "crack-fade-ticks", 100,
+            "hunger-cost", 5
         );
     }
 
@@ -88,34 +79,30 @@ public final class EarthshatterMechanic extends Mechanic {
     @Override public boolean isChestLootAllowed() { return false; }
     @Override public boolean isVillagerTradeAllowed() { return false; }
     @Override public int getAnvilBaseCost() { return 25; }
+    @Override protected boolean grindstoneRemovableDefault() { return false; }
 
-    // ignoreCancelled тут ставити не можна: при ПКМ по повітрю Bukkit виставляє
-    // useItemInHand у DENY, і подія приходить уже "скасованою" — саме тому здібності
-    // спрацьовували лише коли дивишся на блок
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onUse(PlayerInteractEvent e) {
-        if (!isMechanicEnabled()) return;
-        if (e.getHand() != EquipmentSlot.HAND) return;
-        if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-
+    @Override
+    protected void onRightClick(PlayerInteractEvent e, Player player, int level) {
         ItemStack axe = e.getItem();
-        int level = levelOf(axe);
-        if (level == 0) return;
-
-        Player player = e.getPlayer();
-        if (player.hasCooldown(axe.getType()) || !player.isOnGround()) return;
+        int held = levelOf(axe);
+        if (held == 0 || !player.isOnGround()) return;
+        if (!ready(player, axe)) {
+            deny(player);
+            return;
+        }
+        if (!spend(player, getInt("hunger-cost"))) return;
 
         e.setCancelled(true);
-        player.setCooldown(axe.getType(), Math.max(20, getInt("cooldown-ticks") - (level - 1) * 20));
+        cooldown(player, axe, Math.max(20, getInt("cooldown-ticks") - (held - 1) * 20));
+        activation(player);
 
         player.setVelocity(new Vector(0, getDouble("leap-height"), 0));
-        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_RAVAGER_ROAR, 0.7f, 1.7f);
-        player.getWorld().spawnParticle(Particle.CLOUD, player.getLocation(), 25, 0.4, 0.1, 0.4, 0.08);
+        soundAt(player.getLocation(), Sound.ENTITY_RAVAGER_ROAR, 0.7f, 1.7f);
+        particles(player.getLocation(), Particle.CLOUD, 25, 0.4, 0.1, 0.4, 0.08);
 
-        new Landing(player, level).runTaskTimer(getPlugin(), 8L, 1L);
+        new Landing(player, held).runTaskTimer(getPlugin(), 8L, 1L);
     }
 
-    /** Чекає приземлення й перетворює накопичену висоту на довжину та силу розлому. */
     private final class Landing extends BukkitRunnable {
 
         private final Player player;
@@ -136,19 +123,18 @@ public final class EarthshatterMechanic extends Mechanic {
             }
 
             peakFall = Math.max(peakFall, player.getFallDistance());
-            player.getWorld().spawnParticle(Particle.ASH, player.getLocation(), 2, 0.2, 0.2, 0.2, 0.01);
+            particles(player.getLocation(), Particle.ASH, 2, 0.2, 0.2, 0.2, 0.01);
             if (!player.isOnGround()) return;
 
             cancel();
             player.setFallDistance(0);
-            player.getWorld().playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, 1f, 0.6f);
-            player.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, player.getLocation(), 1);
+            soundAt(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, 1f, 0.6f);
+            particles(player.getLocation(), Particle.EXPLOSION_EMITTER, 1, 0);
 
             new Fissure(player, level, peakFall).runTaskTimer(getPlugin(), 1L, 1L);
         }
     }
 
-    /** Розлом біжить від гравця по блоку за тік — видно, як тріщина наздоганяє ворога. */
     private final class Fissure extends BukkitRunnable {
 
         private final Player caster;
@@ -174,7 +160,7 @@ public final class EarthshatterMechanic extends Mechanic {
             }
 
             Location center = caster.getLocation().add(direction.clone().multiply(step));
-            int width = step < length / 2 ? 1 : 2; // тріщина розширюється до кінця
+            int width = step < length / 2 ? 1 : 2;
 
             for (int side = -width; side <= width; side++) {
                 Vector offset = new Vector(-direction.getZ(), 0, direction.getX()).multiply(side);
@@ -183,9 +169,7 @@ public final class EarthshatterMechanic extends Mechanic {
             strike(center, width + 1.0);
         }
 
-        /** Справжня зміна лише одна: дерен вигорає до землі. Розжарений камінь — клієнтський. */
         private void crack(Location at) {
-            World world = at.getWorld();
             Block surface = surfaceAt(at);
             if (surface == null) return;
 
@@ -196,11 +180,11 @@ public final class EarthshatterMechanic extends Mechanic {
             showCrack(surface);
 
             Location top = surface.getLocation().add(0.5, 1.05, 0.5);
-            world.spawnParticle(Particle.BLOCK, top, 14, 0.4, 0.15, 0.4, surface.getBlockData());
-            world.spawnParticle(Particle.FLAME, top, 10, 0.3, 0.25, 0.3, 0.04);
-            world.spawnParticle(Particle.LAVA, top, 2, 0.3, 0.1, 0.3, 0);
-            world.spawnParticle(Particle.LARGE_SMOKE, top, 4, 0.3, 0.3, 0.3, 0.02);
-            world.playSound(top, Sound.BLOCK_STONE_BREAK, 0.6f, 0.5f);
+            particles(top, Particle.BLOCK, 14, 0.4, 0.15, 0.4, 0, surface.getBlockData());
+            particles(top, Particle.FLAME, 10, 0.3, 0.25, 0.3, 0.04);
+            particles(top, Particle.LAVA, 2, 0.3, 0.1, 0.3, 0);
+            particles(top, Particle.LARGE_SMOKE, 4, 0.3, 0.3, 0.3, 0.02);
+            soundAt(top, Sound.BLOCK_STONE_BREAK, 0.6f, 0.5f);
         }
 
         private Block surfaceAt(Location at) {
@@ -214,7 +198,6 @@ public final class EarthshatterMechanic extends Mechanic {
             return null;
         }
 
-        /** Тільки для очей: тріщина світиться магмою і сама згасає. */
         private void showCrack(Block block) {
             var original = block.getBlockData();
             var glow = Material.MAGMA_BLOCK.createBlockData();

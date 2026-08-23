@@ -1,21 +1,21 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import me.enchantments.main.Mechanic;
+
+import java.util.List;
+import java.util.Map;
 
 public final class AxeCleaveMechanic extends Mechanic {
-
-    private final Map<UUID, Long> activeCleavePulls = new ConcurrentHashMap<>();
 
     @Override
     public String getId() {
@@ -38,13 +38,8 @@ public final class AxeCleaveMechanic extends Mechanic {
     }
 
     @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return false;
-    }
-
-    @Override
     public List<Material> getSupportedItems() {
-        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, 
+        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE,
                        Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
     }
 
@@ -57,43 +52,56 @@ public final class AxeCleaveMechanic extends Mechanic {
     public Map<String, Object> getDefaults() {
         return Map.of(
             "cleave-radius", 2.0,
-            "cleave-damage", 3.0
+            "cleave-damage", 3.0,
+            "duration-ticks", 40,
+            "cooldown-ticks", 100,
+            "hunger-cost", 3
         );
     }
 
     @Override
-    protected void onEnable() {
-        new CleavePulseTask().runTaskTimer(Enchantments.getInstance(), 0L, 2L);
-    }
-
-    @EventHandler
-    public void onThrow(PlayerInteractEvent e) {
-        if (!isMechanicEnabled()) return;
-        Player p = e.getPlayer();
-        ItemStack axe = p.getInventory().getItemInMainHand();
+    protected void onRightClick(PlayerInteractEvent e, Player player, int level) {
+        ItemStack axe = e.getItem();
         if (levelOf(axe) == 0) return;
+        if (!ready(player, axe)) {
+            deny(player);
+            return;
+        }
+        if (!spend(player, getInt("hunger-cost"))) return;
 
-        activeCleavePulls.put(p.getUniqueId(), System.currentTimeMillis());
+        cooldown(player, axe, getInt("cooldown-ticks"));
+        activation(player);
+        new Cleave(player, level).runTaskTimer(getPlugin(), 0L, 2L);
     }
 
-    private final class CleavePulseTask extends BukkitRunnable {
+    private final class Cleave extends BukkitRunnable {
+
+        private final Player player;
+        private final int level;
+        private int ticks;
+
+        private Cleave(Player player, int level) {
+            this.player = player;
+            this.level = level;
+        }
+
         @Override
         public void run() {
-            double cleaveRadius = getDouble("cleave-radius");
-            double cleaveDamage = getDouble("cleave-damage");
-            Bukkit.getOnlinePlayers().forEach(player -> {
-                UUID uuid = player.getUniqueId();
-                if (!activeCleavePulls.containsKey(uuid)) return;
+            if (!player.isOnline() || player.isDead() || ticks >= getInt("duration-ticks")) {
+                cancel();
+                return;
+            }
+            ticks += 2;
 
-                player.getWorld().getNearbyEntities(player.getEyeLocation(), cleaveRadius, cleaveRadius, cleaveRadius).stream()
-                        .filter(ent -> ent instanceof LivingEntity && ent != player)
-                        .map(ent -> (LivingEntity) ent)
-                        .forEach(ent -> ent.damage(cleaveDamage, player));
+            double radius = getDouble("cleave-radius") + (level - 1) * 0.5;
+            double damage = getDouble("cleave-damage");
 
-                if (System.currentTimeMillis() - activeCleavePulls.get(uuid) > 2500) {
-                    activeCleavePulls.remove(uuid);
-                }
-            });
+            for (Entity nearby : player.getWorld().getNearbyEntities(player.getEyeLocation(), radius, radius, radius)) {
+                if (nearby instanceof LivingEntity target && !target.equals(player)) target.damage(damage, player);
+            }
+
+            particleCircle(player.getLocation().add(0, 0.9, 0), Particle.CRIT, radius, 14);
+            soundAt(player.getLocation(), Sound.ENTITY_PLAYER_ATTACK_SWEEP, 0.4f, 1.3f);
         }
     }
 }

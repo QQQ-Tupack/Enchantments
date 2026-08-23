@@ -1,6 +1,8 @@
 package me.enchantments.mechanics;
 
 import me.enchantments.main.Enchantments;
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -29,30 +31,10 @@ public final class HorseCompanionMechanic extends Mechanic {
     private final Map<UUID, Long> boltCooldown = new ConcurrentHashMap<>();
     private int careTicks = 0;
 
-    @Override
-    public String getId() {
-        return "horse_companion";
-    }
-
-    @Override
-    public String getName() {
-        return "Кінь компаньйон";
-    }
-
-    @Override
-    public String getDescription() {
-        return "Кінь ходить за вами, не б'ється при падінні, пасеться біля вас і рве з місця, коли вам боляче";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 3;
-    }
-
-    @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return false;
-    }
+    @Override public String getId() { return "horse_companion"; }
+    @Override public String getName() { return "Вірний"; }
+    @Override public String getDescription() { return "Кінь ходить за вами, не б'ється при падінні, пасеться біля вас і рве з місця, коли вам боляче"; }
+    @Override public int getMaxLevel() { return 3; }
 
     @Override
     public List<Material> getSupportedItems() {
@@ -60,10 +42,7 @@ public final class HorseCompanionMechanic extends Mechanic {
                        Material.GOLDEN_HORSE_ARMOR, Material.DIAMOND_HORSE_ARMOR);
     }
 
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.BODY);
-    }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.BODY); }
 
     @Override
     public Map<String, Object> getDefaults() {
@@ -86,26 +65,15 @@ public final class HorseCompanionMechanic extends Mechanic {
         new HorseCare().runTaskTimer(Enchantments.getInstance(), 40L, 20L);
     }
 
-    // ==========================================
-    //   РІВНІ
-    // ==========================================
-    //  1 — покликати свистом, слідування, імунітет до падіння під вершником
-    //  2 — кінь пасеться біля власника й не тоне
-    //  3 — ривок при пораненні вершника та зменшення урону по коню під сідлом
-
+    /** 1 — свист, слідування, імунітет до падіння. 2 — пасеться і не тоне. 3 — ривок при пораненні вершника, менше урону під сідлом. */
     private int levelOn(AbstractHorse horse) {
         if (horse == null || !horse.isTamed() || horse.getOwner() == null || horse.getEquipment() == null) return 0;
         return levelOf(horse.getEquipment().getItem(EquipmentSlot.BODY));
     }
 
     private boolean ownedBy(AbstractHorse horse, Player player) {
-        return horse.getOwner() != null
-            && horse.getOwner().getUniqueId().equals(player.getUniqueId());
+        return horse.getOwner() != null && horse.getOwner().getUniqueId().equals(player.getUniqueId());
     }
-
-    // ==========================================
-    //   БІЙ ТА ПАДІННЯ
-    // ==========================================
 
     @EventHandler(ignoreCancelled = true)
     public void onHorseHurt(EntityDamageEvent e) {
@@ -115,14 +83,12 @@ public final class HorseCompanionMechanic extends Mechanic {
         int level = levelOn(horse);
         if (level == 0) return;
 
-        // рівень 1: кінь більше не вбивається об землю під вершником
         if (getBoolean("fall-immunity") && e.getCause() == EntityDamageEvent.DamageCause.FALL) {
             e.setCancelled(true);
             horse.setFallDistance(0);
             return;
         }
 
-        // рівень 3: броня тримає удар, поки в сідлі хтось є
         if (level >= 3 && !horse.getPassengers().isEmpty()) {
             e.setDamage(e.getDamage() * (1.0 - getDouble("mounted-damage-reduction")));
         }
@@ -141,13 +107,9 @@ public final class HorseCompanionMechanic extends Mechanic {
 
         int duration = Math.max(1, getInt("bolt-duration")) * 20;
         horse.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, duration, 1, true, true, true));
-        horse.getWorld().playSound(horse.getLocation(), Sound.ENTITY_HORSE_BREATHE, 0.8f, 1.4f);
-        horse.getWorld().spawnParticle(Particle.CLOUD, horse.getLocation(), 12, 0.4, 0.1, 0.4, 0.05);
+        soundAt(horse.getLocation(), Sound.ENTITY_HORSE_BREATHE, 0.8f, 1.4f);
+        particles(horse.getLocation(), Particle.CLOUD, 12, 0.4);
     }
-
-    // ==========================================
-    //   ДОГЛЯД: ВИПАС І ДИХАННЯ (РІВЕНЬ 2)
-    // ==========================================
 
     private final class HorseCare extends BukkitRunnable {
         @Override
@@ -161,14 +123,11 @@ public final class HorseCompanionMechanic extends Mechanic {
                     int level = levelOn(horse);
                     if (level < 2) continue;
 
-                    // не тоне
                     if (horse.isInWater() && horse.getRemainingAir() < horse.getMaximumAir()) {
                         horse.setRemainingAir(horse.getMaximumAir());
                     }
 
-                    // пасеться, поки без вершника і стоїть на траві
-                    if (careTicks % grazeInterval != 0) continue;
-                    if (!horse.getPassengers().isEmpty()) continue;
+                    if (careTicks % grazeInterval != 0 || !horse.getPassengers().isEmpty()) continue;
 
                     Material ground = horse.getLocation().clone().add(0, -1, 0).getBlock().getType();
                     if (ground != Material.GRASS_BLOCK && ground != Material.MOSS_BLOCK) continue;
@@ -178,15 +137,11 @@ public final class HorseCompanionMechanic extends Mechanic {
                     if (horse.getHealth() >= max) continue;
 
                     horse.setHealth(Math.min(max, horse.getHealth() + 1.0));
-                    horse.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, horse.getLocation().add(0, 1, 0), 3, 0.4, 0.3, 0.4, 0.01);
+                    particles(horse.getLocation().add(0, 1, 0), Particle.HAPPY_VILLAGER, 3, 0.4);
                 }
             }
         }
     }
-
-    // ==========================================
-    //   СЛІДУВАННЯ (РІВЕНЬ 1)
-    // ==========================================
 
     private final class HorseFollower extends BukkitRunnable {
         @Override
@@ -202,7 +157,6 @@ public final class HorseCompanionMechanic extends Mechanic {
                 String block = loc.getBlock().getType().name();
                 if (block.contains("LAVA") || block.contains("FIRE")) continue;
 
-                // сканується лише світ гравця, а не всі світи на кожного гравця
                 for (AbstractHorse horse : player.getWorld().getEntitiesByClass(AbstractHorse.class)) {
                     if (levelOn(horse) == 0 || !ownedBy(horse, player) || horse.isLeashed()) continue;
                     if (!horse.getPassengers().isEmpty()) continue;

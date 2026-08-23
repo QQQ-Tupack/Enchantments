@@ -1,6 +1,5 @@
 package me.enchantments.mechanics;
 
-import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -13,8 +12,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
+
+import me.enchantments.main.Mechanic;
 
 import java.util.List;
 import java.util.Map;
@@ -22,50 +24,20 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Гейзер.
- *
- * Присідання у воді збирає під ногами тиск: бульбашки густішають, звук наростає.
- * Відпустив присідання — стовп окропу вистрілює вгору, викидаючи гравця й усіх поруч
- * у повітря. Приземлення після власного гейзера не шкодить.
- *
  * Id лишився 'ocean_grace', щоб не переробляти капелюх в Oraxen. Якщо міняти —
  * треба правити і предмет, і видалити старий mechanics/ocean_grace.yml.
  */
 public final class OceanGraceMechanic extends Mechanic {
 
     private final Map<UUID, BukkitRunnable> charging = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> readyAt = new ConcurrentHashMap<>();
     private final Map<UUID, Long> softLanding = new ConcurrentHashMap<>();
 
-    @Override
-    public String getId() {
-        return "ocean_grace";
-    }
-
-    @Override
-    public String getName() {
-        return "Гейзер";
-    }
-
-    @Override
-    public String getDescription() {
-        return "Присядь у воді — тиск набереться; відпустиш, і стовп окропу викине тебе в небо";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 1;
-    }
-
-    @Override
-    public List<Material> getSupportedItems() {
-        return List.of(Material.TOTEM_OF_UNDYING);
-    }
-
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND, EnchantSlot.HEAD);
-    }
+    @Override public String getId() { return "ocean_grace"; }
+    @Override public String getName() { return "Гейзер"; }
+    @Override public String getDescription() { return "Присядь у воді — тиск набереться; відпустиш, і стовп окропу викине тебе в небо"; }
+    @Override public int getMaxLevel() { return 1; }
+    @Override public List<Material> getSupportedItems() { return List.of(Material.TOTEM_OF_UNDYING); }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND, EnchantSlot.HEAD); }
 
     @Override
     public Map<String, Object> getDefaults() {
@@ -80,20 +52,9 @@ public final class OceanGraceMechanic extends Mechanic {
         );
     }
 
-    @Override
-    public double getEnchantingTableChance() {
-        return 0.06;
-    }
-
-    @Override
-    public int getWeight() {
-        return 8;
-    }
-
-    @Override
-    public double getChestLootChance() {
-        return 0.06;
-    }
+    @Override public double getEnchantingTableChance() { return 0.06; }
+    @Override public int getWeight() { return 8; }
+    @Override public double getChestLootChance() { return 0.06; }
 
     @Override
     public List<String> getLootChests() {
@@ -110,14 +71,15 @@ public final class OceanGraceMechanic extends Mechanic {
         return Map.of("FISHERMAN", Map.of("villager-level", 3, "min-level", 1, "max-level", 1, "price", 20));
     }
 
-    @Override
-    public int getAnvilBaseCost() {
-        return 6;
-    }
+    @Override public int getAnvilBaseCost() { return 6; }
 
-    // ==========================================
-    //   ЗАРЯДКА
-    // ==========================================
+    private ItemStack carrier(Player player) {
+        ItemStack main = player.getInventory().getItemInMainHand();
+        if (levelOf(main) > 0) return main;
+        ItemStack off = player.getInventory().getItemInOffHand();
+        if (levelOf(off) > 0) return off;
+        return player.getInventory().getHelmet();
+    }
 
     @EventHandler
     public void onSneak(PlayerToggleSneakEvent e) {
@@ -135,13 +97,8 @@ public final class OceanGraceMechanic extends Mechanic {
             return;
         }
 
-        if (levelOnPlayer(player) == 0) return;
-        if (!player.isInWater()) return;
-        if (charging.containsKey(id)) return;
-
-        long now = player.getWorld().getFullTime();
-        Long ready = readyAt.get(id);
-        if (ready != null && now < ready) return;
+        if (levelOnPlayer(player) == 0 || !player.isInWater() || charging.containsKey(id)) return;
+        if (!ready(player, carrier(player))) return;
 
         Charge charge = new Charge(player);
         charging.put(id, charge);
@@ -179,28 +136,21 @@ public final class OceanGraceMechanic extends Mechanic {
             }
 
             if (ticks >= getInt("charge-ticks")) {
-                player.sendActionBar(Component.text("§b✦ Тиск набрано"));
                 world.playSound(at, Sound.BLOCK_BUBBLE_COLUMN_WHIRLPOOL_AMBIENT, 0.8f, 1.6f);
-                cancel(); // далі просто чекаємо, поки гравець встане
+                cancel();
             }
         }
     }
 
-    // ==========================================
-    //   ВИВЕРЖЕННЯ
-    // ==========================================
-
     private void erupt(Player player) {
-        UUID id = player.getUniqueId();
         if (!player.isInWater() || levelOnPlayer(player) == 0) return;
 
         Location base = player.getLocation();
         World world = base.getWorld();
 
-        readyAt.put(id, world.getFullTime() + getInt("cooldown-ticks"));
-        softLanding.put(id, System.currentTimeMillis() + Math.max(1, getInt("soft-landing-seconds")) * 1000L);
+        cooldown(player, carrier(player), getInt("cooldown-ticks"));
+        softLanding.put(player.getUniqueId(), System.currentTimeMillis() + Math.max(1, getInt("soft-landing-seconds")) * 1000L);
 
-        // емітер сам малює основу, пухкання й плюмаж — рівно як у природного гейзера
         world.spawnParticle(Particle.GEYSER, base, 1);
         world.spawnParticle(Particle.GEYSER_BASE, base, 25, 0.6, 0.1, 0.6, 0.05);
 
@@ -230,24 +180,14 @@ public final class OceanGraceMechanic extends Mechanic {
         player.setVelocity(own.setY(getDouble("player-power")));
     }
 
-    // ==========================================
-    //   ПРИЗЕМЛЕННЯ ТА ПРИБИРАННЯ
-    // ==========================================
-
     @EventHandler(ignoreCancelled = true)
     public void onLand(EntityDamageEvent e) {
         if (e.getCause() != EntityDamageEvent.DamageCause.FALL) return;
         if (!(e.getEntity() instanceof Player player)) return;
 
-        Long until = softLanding.get(player.getUniqueId());
-        if (until == null) return;
+        Long until = softLanding.remove(player.getUniqueId());
+        if (until == null || System.currentTimeMillis() > until) return;
 
-        if (System.currentTimeMillis() > until) {
-            softLanding.remove(player.getUniqueId());
-            return;
-        }
-
-        softLanding.remove(player.getUniqueId());
         e.setCancelled(true);
         player.getWorld().spawnParticle(Particle.SPLASH, player.getLocation(), 20, 0.4, 0.1, 0.4, 0.05);
         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_SPLASH, 0.7f, 1.2f);
@@ -258,7 +198,6 @@ public final class OceanGraceMechanic extends Mechanic {
         UUID id = e.getPlayer().getUniqueId();
         BukkitRunnable task = charging.remove(id);
         if (task != null) task.cancel();
-        readyAt.remove(id);
         softLanding.remove(id);
     }
 }

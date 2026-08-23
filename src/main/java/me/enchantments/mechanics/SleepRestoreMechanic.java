@@ -11,6 +11,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 
+import me.enchantments.main.Mechanic;
+
 import java.util.List;
 import java.util.Map;
 
@@ -106,8 +108,8 @@ public final class SleepRestoreMechanic extends Mechanic {
             player.setFoodLevel(20);
             if (getBoolean("restore-saturation")) player.setSaturation(20f);
 
-            player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.6f, 1.4f);
-            player.getWorld().spawnParticle(Particle.HEART, player.getLocation().add(0, 1, 0), 8, 0.4, 0.4, 0.4, 0.02);
+            soundAt(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.6f, 1.4f);
+            particles(player.getLocation().add(0, 1, 0), Particle.HEART, 8, 0.4);
         }, 1L);
     }
 }

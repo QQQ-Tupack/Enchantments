@@ -16,7 +16,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
@@ -24,59 +23,40 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import me.enchantments.main.Mechanic;
+
 import java.util.List;
 import java.util.Map;
 
-/**
- * Зброя візера: тавро й детонація.
- *
- * ПКМ випускає череп, який сам доводить до цілі. Кожне влучання лишає тавро;
- * на третьому тавра зриваються й вибухають, розносячи Іссушення на всіх поруч.
- *
- * Тавра рахуються на самій жертві, тому кілька гравців можуть добивати одну ціль разом,
- * а лічильник зникає разом із мобом — без жодного стану в плагіні.
- */
 public final class WitherBarrageMechanic extends Mechanic {
 
     private static final NamespacedKey SKULL = new NamespacedKey("enchantments", "wither_skull");
     private static final NamespacedKey MARKS = new NamespacedKey("enchantments", "wither_marks");
 
-    @Override
-    public String getId() {
-        return "wither_barrage";
-    }
-
-    @Override
-    public String getName() {
-        return "Тавро згасання";
-    }
-
-    @Override
-    public String getDescription() {
-        return "ПКМ випускає череп, що переслідує ціль; три влучання зривають тавра вибухом";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 3;
-    }
+    @Override public String getId() { return "wither_barrage"; }
+    @Override public String getName() { return "Тавро згасання"; }
+    @Override public String getDescription() { return "ПКМ випускає череп, що переслідує ціль; три влучання зривають тавра вибухом"; }
+    @Override public int getMaxLevel() { return 3; }
 
     @Override
     public List<Material> getSupportedItems() {
         return List.of(
-                Material.NETHERITE_SWORD,
-                Material.DIAMOND_SWORD,
-                Material.IRON_SWORD,
-                Material.GOLDEN_SWORD,
-                Material.STONE_SWORD,
-                Material.WOODEN_SWORD
+            Material.NETHERITE_SWORD,
+            Material.DIAMOND_SWORD,
+            Material.IRON_SWORD,
+            Material.GOLDEN_SWORD,
+            Material.STONE_SWORD,
+            Material.WOODEN_SWORD
         );
     }
 
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.MAINHAND);
-    }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.MAINHAND); }
+
+    @Override public boolean isEnchantingTableAllowed() { return false; }
+    @Override public boolean isChestLootAllowed() { return false; }
+    @Override public boolean isVillagerTradeAllowed() { return false; }
+    @Override public int getAnvilBaseCost() { return 28; }
+    @Override protected boolean grindstoneRemovableDefault() { return false; }
 
     @Override
     public Map<String, Object> getDefaults() {
@@ -93,37 +73,18 @@ public final class WitherBarrageMechanic extends Mechanic {
         );
     }
 
-    @Override public boolean isEnchantingTableAllowed() { return false; }
-    @Override public boolean isChestLootAllowed() { return false; }
-    @Override public boolean isVillagerTradeAllowed() { return false; }
-    @Override public int getAnvilBaseCost() { return 28; }
-
-    // ==========================================
-    //   ПОСТРІЛ
-    // ==========================================
-
-    @EventHandler
-    public void onUse(PlayerInteractEvent e) {
-        if (!isMechanicEnabled()) return;
-        if (e.getHand() != EquipmentSlot.HAND) return;
-        if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-
-        Player player = e.getPlayer();
+    @Override
+    protected void onRightClick(PlayerInteractEvent e, Player player, int level) {
         ItemStack weapon = e.getItem();
         if (weapon == null) return;
 
-        int level = levelOf(weapon);
-        if (level == 0) return;
-
-        // клік по скрині, дверях тощо лишаємо звичайною взаємодією, якщо гравець не крадеться
         Block clicked = e.getClickedBlock();
         if (e.getAction() == Action.RIGHT_CLICK_BLOCK && clicked != null
                 && clicked.getType().isInteractable() && !player.isSneaking()) return;
 
-        if (player.hasCooldown(weapon)) return;
-
+        if (!ready(player, weapon)) return;
         e.setCancelled(true);
-        player.setCooldown(weapon, Math.max(20, getInt("cooldown-ticks") - (level - 1) * 10));
+        cooldown(player, weapon, Math.max(20, getInt("cooldown-ticks") - (level - 1) * 10));
 
         WitherSkull skull = player.launchProjectile(WitherSkull.class,
                 player.getLocation().getDirection().multiply(getDouble("skull-speed")));
@@ -133,11 +94,10 @@ public final class WitherBarrageMechanic extends Mechanic {
         skull.setYield(0);
         skull.getPersistentDataContainer().set(SKULL, PersistentDataType.INTEGER, level);
 
-        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_WITHER_SHOOT, 1f, 1.1f);
+        soundAt(player.getLocation(), Sound.ENTITY_WITHER_SHOOT, 1f, 1.1f);
         new Hunter(skull).runTaskTimer(getPlugin(), 2L, 1L);
     }
 
-    /** Череп сам доводить до найближчої цілі попереду — але повертає повільно, тож від нього можна відійти. */
     private final class Hunter extends BukkitRunnable {
 
         private final WitherSkull skull;
@@ -164,9 +124,9 @@ public final class WitherBarrageMechanic extends Mechanic {
             }
 
             Location at = skull.getLocation();
-            at.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, at, 4, 0.1, 0.1, 0.1, 0.01);
-            at.getWorld().spawnParticle(Particle.SMOKE, at, 3, 0.15, 0.15, 0.15, 0.01);
-            at.getWorld().spawnParticle(Particle.SOUL, at, 1, 0.2, 0.2, 0.2, 0);
+            particles(at, Particle.SOUL_FIRE_FLAME, 4, 0.1, 0.1, 0.1, 0.01);
+            particles(at, Particle.SMOKE, 3, 0.15, 0.15, 0.15, 0.01);
+            particles(at, Particle.SOUL, 1, 0.2, 0.2, 0.2, 0);
         }
 
         private LivingEntity nearestPrey() {
@@ -189,10 +149,6 @@ public final class WitherBarrageMechanic extends Mechanic {
             return best;
         }
     }
-
-    // ==========================================
-    //   ТАВРА Й ДЕТОНАЦІЯ
-    // ==========================================
 
     @EventHandler(ignoreCancelled = true)
     public void onHit(ProjectileHitEvent e) {
@@ -218,35 +174,33 @@ public final class WitherBarrageMechanic extends Mechanic {
         }
     }
 
-    /** Тавра кружляють навколо жертви — скільки їх, стільки й черепів у кільці. */
     private void brand(LivingEntity target, int marks) {
         Location at = target.getLocation();
         int needed = Math.max(1, getInt("marks-to-detonate"));
 
-        target.getWorld().playSound(at, Sound.ENTITY_WITHER_HURT, 0.6f, 1.5f + marks * 0.2f);
-        target.getWorld().playSound(at, Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 0.7f, 0.6f + marks * 0.35f);
+        soundAt(at, Sound.ENTITY_WITHER_HURT, 0.6f, 1.5f + marks * 0.2f);
+        soundAt(at, Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 0.7f, 0.6f + marks * 0.35f);
 
-        // останнє тавро перед детонацією звучить як зведений запал
         if (marks == needed - 1) {
-            target.getWorld().playSound(at, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.8f, 1.4f);
-            target.getWorld().playSound(at, Sound.ENTITY_CREEPER_PRIMED, 0.5f, 1.6f);
+            soundAt(at, Sound.BLOCK_RESPAWN_ANCHOR_CHARGE, 0.8f, 1.4f);
+            soundAt(at, Sound.ENTITY_CREEPER_PRIMED, 0.5f, 1.6f);
         }
         for (int i = 0; i < marks; i++) {
             double angle = Math.PI * 2 * i / marks;
-            target.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME,
-                    target.getLocation().add(Math.cos(angle) * 0.8, 1.2, Math.sin(angle) * 0.8), 6, 0.05, 0.05, 0.05, 0.01);
+            particles(target.getLocation().add(Math.cos(angle) * 0.8, 1.2, Math.sin(angle) * 0.8),
+                    Particle.SOUL_FIRE_FLAME, 6, 0.05, 0.05, 0.05, 0.01);
         }
-        target.getWorld().spawnParticle(Particle.SMOKE, target.getLocation().add(0, 1.2, 0), 10, 0.3, 0.3, 0.3, 0.02);
+        particles(target.getLocation().add(0, 1.2, 0), Particle.SMOKE, 10, 0.3, 0.3, 0.3, 0.02);
     }
 
     private void detonate(LivingEntity epicenter, Player shooter, int level) {
         double radius = getDouble("detonation-radius") + (level - 1) * 0.5;
         Location at = epicenter.getLocation().add(0, 1, 0);
 
-        at.getWorld().playSound(at, Sound.ENTITY_WITHER_BREAK_BLOCK, 1.2f, 0.7f);
-        at.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, at, 1);
-        at.getWorld().spawnParticle(Particle.SOUL, at, 60, radius / 2, 1.0, radius / 2, 0.15);
-        at.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, at, 40, radius / 2, 0.8, radius / 2, 0.08);
+        soundAt(at, Sound.ENTITY_WITHER_BREAK_BLOCK, 1.2f, 0.7f);
+        particles(at, Particle.EXPLOSION_EMITTER, 1, 0, 0, 0, 0);
+        particles(at, Particle.SOUL, 60, radius / 2, 1.0, radius / 2, 0.15);
+        particles(at, Particle.SOUL_FIRE_FLAME, 40, radius / 2, 0.8, radius / 2, 0.08);
 
         for (Entity nearby : at.getWorld().getNearbyEntities(at, radius, radius, radius)) {
             if (!(nearby instanceof LivingEntity victim) || victim.equals(shooter)) continue;
@@ -257,7 +211,6 @@ public final class WitherBarrageMechanic extends Mechanic {
         }
     }
 
-    /** Черепи не риють ландшафт — увесь ефект у таврах. */
     @EventHandler(ignoreCancelled = true)
     public void onExplode(EntityExplodeEvent e) {
         if (!e.getEntity().getPersistentDataContainer().has(SKULL, PersistentDataType.INTEGER)) return;

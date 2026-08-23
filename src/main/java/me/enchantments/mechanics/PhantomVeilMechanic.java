@@ -1,10 +1,12 @@
 package me.enchantments.mechanics;
 
-import net.kyori.adventure.text.Component;
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -40,7 +42,7 @@ public final class PhantomVeilMechanic extends Mechanic {
 
     @Override
     public String getDescription() {
-        return "Присядь і завмри — вороги перестануть тебе помічати, доки ти не поворухнешся";
+        return "Присядь і завмри — вороги перестануть тебе помічати, доки ти не поворухнешся.";
     }
 
     @Override
@@ -131,11 +133,12 @@ public final class PhantomVeilMechanic extends Mechanic {
             return;
         }
 
-        int needed = Math.max(1, getInt("activation-seconds")) * 4; // цикл виконується 4 рази на секунду
+        int needed = Math.max(1, getInt("activation-seconds")) * 4;
         int count = stillCount.merge(id, 1, Integer::sum);
 
         if (count >= needed && veiled.add(id)) {
-            player.sendActionBar(Component.text("§8✦ Вуаль огорнула тебе"));
+            activation(player);
+            particleCircle(player.getLocation().add(0, 0.05, 0), Particle.SMOKE, 0.6, 16);
         }
         if (veiled.contains(id)) {
             player.getWorld().spawnParticle(Particle.SMOKE, player.getLocation().add(0, 0.2, 0), 2, 0.3, 0.05, 0.3, 0);
@@ -156,11 +159,9 @@ public final class PhantomVeilMechanic extends Mechanic {
     @EventHandler(ignoreCancelled = true)
     public void onTarget(EntityTargetLivingEntityEvent e) {
         if (!isMechanicEnabled()) return;
-        if (!(e.getTarget() instanceof Player player)) return;
-        if (!veiled.contains(player.getUniqueId())) return;
-        if (e.getReason() == EntityTargetEvent.TargetReason.TARGET_ATTACKED_ENTITY) return; // вдарив — сам винен
-        if (levelOnPlayer(player) == 0) return;
-        if (!e.getEntity().getWorld().equals(player.getWorld())) return;
+        if (!(e.getTarget() instanceof Player player) || !veiled.contains(player.getUniqueId())) return;
+        if (e.getReason() == EntityTargetEvent.TargetReason.TARGET_ATTACKED_ENTITY) return;
+        if (levelOnPlayer(player) == 0 || !e.getEntity().getWorld().equals(player.getWorld())) return;
 
         double radius = getDouble("radius");
         if (e.getEntity().getLocation().distanceSquared(player.getLocation()) > radius * radius) return;
@@ -175,13 +176,10 @@ public final class PhantomVeilMechanic extends Mechanic {
             dropVeil(player);
             return;
         }
-        if (!isMechanicEnabled()) return;
-        if (!(e.getEntity() instanceof Player player)) return;
-        if (!veiled.contains(player.getUniqueId())) return;
+        if (!isMechanicEnabled() || !(e.getEntity() instanceof Player player) || !veiled.contains(player.getUniqueId())) return;
 
-        // моб, який усе одно дістав до гравця — удар не проходить, ціль скидається
-        Entity source = e.getDamager() instanceof Projectile projectile
-                && projectile.getShooter() instanceof Entity shooter ? shooter : e.getDamager();
+        Entity source = e.getDamager() instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter
+                ? shooter : e.getDamager();
 
         if (source instanceof Mob mob) {
             mob.setTarget(null);
@@ -205,7 +203,8 @@ public final class PhantomVeilMechanic extends Mechanic {
     private void dropVeil(Player player) {
         if (veiled.remove(player.getUniqueId())) {
             stillCount.remove(player.getUniqueId());
-            player.sendActionBar(Component.text("§7Вуаль спала"));
+            soundFor(player, Sound.BLOCK_SCULK_SENSOR_CLICKING_STOP, 0.4f, 1.6f);
+            particles(player.getLocation().add(0, 1, 0), Particle.SMOKE, 8, 0.3);
         }
     }
 }

@@ -1,6 +1,7 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -9,19 +10,20 @@ import org.bukkit.entity.Chicken;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.player.PlayerToggleSneakEvent;
-import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class ParachuteMechanic extends Mechanic {
 
-    private final Map<UUID, List<Chicken>> active = new HashMap<>();
-    private final Map<UUID, Long> cooldownUntil = new HashMap<>();
+    private final Map<UUID, List<Chicken>> active = new ConcurrentHashMap<>();
 
     @Override
     public String getId() {
@@ -35,7 +37,7 @@ public final class ParachuteMechanic extends Mechanic {
 
     @Override
     public String getDescription() {
-        return "Дозволяє керованого опускатися на парашуті";
+        return "Присівши в падінні, розкриває парашут і сповільнює спуск.";
     }
 
     @Override
@@ -44,14 +46,10 @@ public final class ParachuteMechanic extends Mechanic {
     }
 
     @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return false;
-    }
-
-    @Override
     public List<Material> getSupportedItems() {
-        return List.of(Material.LEATHER_CHESTPLATE, Material.CHAINMAIL_CHESTPLATE, Material.IRON_CHESTPLATE, Material.COPPER_CHESTPLATE,
-                       Material.GOLDEN_CHESTPLATE, Material.DIAMOND_CHESTPLATE, Material.NETHERITE_CHESTPLATE);
+        return List.of(Material.LEATHER_CHESTPLATE, Material.CHAINMAIL_CHESTPLATE, Material.IRON_CHESTPLATE,
+                       Material.COPPER_CHESTPLATE, Material.GOLDEN_CHESTPLATE, Material.DIAMOND_CHESTPLATE,
+                       Material.NETHERITE_CHESTPLATE);
     }
 
     @Override
@@ -69,65 +67,59 @@ public final class ParachuteMechanic extends Mechanic {
         );
     }
 
-    @EventHandler
-    public void onSneak(PlayerToggleSneakEvent e) {
-        if (!isMechanicEnabled()) return;
-        Player p = e.getPlayer();
-        if (p.isFlying() || p.getGameMode() != GameMode.SURVIVAL || p.isOnGround()) return;
-        if (p.getLocation().subtract(0, 1, 0).getBlock().getType().isSolid()) return;
-        
-        double fallDistanceTrigger = getDouble("fall-distance-trigger");
-        if (p.getFallDistance() <= fallDistanceTrigger) return;
-        if (levelOf(p.getInventory().getChestplate()) == 0) return;
-        open(p);
+    @Override
+    protected void onSneakToggle(Player player, int level, boolean sneaking) {
+        if (!sneaking || player.isFlying() || player.isOnGround() || player.getGameMode() != GameMode.SURVIVAL) return;
+        if (player.getLocation().subtract(0, 1, 0).getBlock().getType().isSolid()) return;
+        if (player.getFallDistance() < getDouble("fall-distance-trigger")) return;
+
+        ItemStack chest = player.getInventory().getChestplate();
+        if (!ready(player, chest)) {
+            deny(player);
+            return;
+        }
+
+        cooldown(player, chest, getInt("cooldown-ticks"));
+        open(player);
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onFallDamage(EntityDamageEvent e) {
-        if (e.getEntity() instanceof Player p && e.getCause() == EntityDamageEvent.DamageCause.FALL && p.hasMetadata("parachute")) {
+        if (e.getEntity() instanceof Player p && e.getCause() == EntityDamageEvent.DamageCause.FALL && active.containsKey(p.getUniqueId())) {
             close(p);
             e.setCancelled(true);
         }
     }
 
-    private void open(Player p) {
-        UUID uid = p.getUniqueId();
-        long now = System.currentTimeMillis();
-        Long readyAt = cooldownUntil.get(uid);
-        if (readyAt != null && readyAt > now) return;
-
-        int durationTicks = getInt("duration-ticks");
-        int cooldownTicks = getInt("cooldown-ticks");
+    private void open(Player player) {
+        UUID uid = player.getUniqueId();
         double descendSpeed = getDouble("descend-speed");
 
-        p.setMetadata("parachute", new FixedMetadataValue(Enchantments.getInstance(), true));
-        List<Chicken> chickens = Stream.of(0, 1, -1).map(x -> spawn(p, x)).collect(Collectors.toList());
+        List<Chicken> chickens = Stream.of(0, 1, -1).map(x -> spawn(player, x)).collect(Collectors.toList());
         active.put(uid, chickens);
-        p.getWorld().playSound(p.getLocation(), Sound.ENTITY_PARROT_FLY, 1f, 1f);
+        soundFor(player, Sound.ENTITY_PARROT_FLY, 1f, 1f);
 
         new BukkitRunnable() {
             int t = 0;
             @Override public void run() {
-                if (t > durationTicks || p.isGliding() || !p.isSneaking() || p.isOnGround()
-                        || p.getLocation().subtract(0, 1, 0).getBlock().getType().isSolid() || !active.containsKey(uid)) {
-                    close(p);
-                    cooldownUntil.put(uid, System.currentTimeMillis() + cooldownTicks * 50L);
+                if (t > getInt("duration-ticks") || player.isGliding() || !player.isSneaking() || player.isOnGround()
+                        || player.getLocation().subtract(0, 1, 0).getBlock().getType().isSolid() || !active.containsKey(uid)) {
+                    close(player);
                     cancel();
                     return;
                 }
-                Vector v = p.getVelocity();
-                p.setVelocity(new Vector(v.getX(), -descendSpeed, v.getZ()));
-                p.getWorld().spawnParticle(Particle.CLOUD, p.getLocation(), 1);
-                p.setFallDistance(0);
+                Vector v = player.getVelocity();
+                player.setVelocity(new Vector(v.getX(), -descendSpeed, v.getZ()));
+                particles(player.getLocation(), Particle.CLOUD, 1, 0);
+                player.setFallDistance(0);
                 t++;
             }
-        }.runTaskTimer(Enchantments.getInstance(), 0L, 1L);
+        }.runTaskTimer(getPlugin(), 0L, 1L);
     }
 
-    private void close(Player p) {
-        active.getOrDefault(p.getUniqueId(), List.of()).forEach(c -> { c.setLeashHolder(null); c.remove(); });
-        active.remove(p.getUniqueId());
-        if (p.hasMetadata("parachute")) p.removeMetadata("parachute", Enchantments.getInstance());
+    private void close(Player player) {
+        active.getOrDefault(player.getUniqueId(), List.of()).forEach(c -> { c.setLeashHolder(null); c.remove(); });
+        active.remove(player.getUniqueId());
     }
 
     private Chicken spawn(Player p, int offsetX) {

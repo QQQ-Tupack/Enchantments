@@ -1,11 +1,7 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.entity.*;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
@@ -13,12 +9,12 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
-import java.util.*;
+import me.enchantments.main.Mechanic;
+
+import java.util.List;
+import java.util.Map;
 
 public final class AxeThrowMechanic extends Mechanic {
-
-    private final Set<UUID> thrown = new HashSet<>();
-    private final Set<UUID> onCooldown = new HashSet<>();
 
     @Override
     public String getId() {
@@ -41,13 +37,8 @@ public final class AxeThrowMechanic extends Mechanic {
     }
 
     @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return false;
-    }
-
-    @Override
     public List<Material> getSupportedItems() {
-        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, 
+        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE,
                        Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
     }
 
@@ -68,96 +59,101 @@ public final class AxeThrowMechanic extends Mechanic {
         );
     }
 
-    @EventHandler
-    public void onThrow(PlayerInteractEvent e) {
-        if (!isMechanicEnabled()) return;
-        Player p = e.getPlayer();
-        ItemStack axe = p.getInventory().getItemInMainHand();
+    @Override
+    protected void onRightClick(PlayerInteractEvent e, Player player, int level) {
+        ItemStack axe = e.getItem();
         if (levelOf(axe) == 0) return;
+        if (e.getAction() == Action.RIGHT_CLICK_BLOCK
+                && (e.getClickedBlock() == null || !e.getClickedBlock().isPassable())) return;
+        if (player.getInventory().getItemInOffHand().getType() == Material.SHIELD || player.isBlocking()) return;
+        if (player.getGameMode() == GameMode.CREATIVE) return;
 
-        boolean blockedByShield = p.getInventory().getItemInOffHand().getType() == Material.SHIELD || p.isBlocking();
-        boolean rightClick = e.getAction() == Action.RIGHT_CLICK_AIR
-                || (e.getAction() == Action.RIGHT_CLICK_BLOCK && e.getClickedBlock() != null && e.getClickedBlock().isPassable());
-        if (!rightClick || blockedByShield || p.getGameMode() == GameMode.CREATIVE || thrown.contains(p.getUniqueId())) return;
-
-        int hungerCost = getInt("hunger-cost");
-        if (onCooldown.contains(p.getUniqueId())) {
-            p.sendActionBar(Component.text("Сокира ще не готова!", NamedTextColor.RED));
+        if (!ready(player, axe)) {
+            deny(player);
             return;
         }
-        if (p.getFoodLevel() < hungerCost) {
-            p.sendActionBar(Component.text("Занадто голодний для кидання!", NamedTextColor.RED));
-            return;
-        }
+        if (!spend(player, getInt("hunger-cost"))) return;
 
-        p.setFoodLevel(p.getFoodLevel() - hungerCost);
-        onCooldown.add(p.getUniqueId());
-        int cooldownTicks = getInt("cooldown-ticks");
-        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> onCooldown.remove(p.getUniqueId()), cooldownTicks);
+        cooldown(player, axe, getInt("cooldown-ticks"));
+        activation(player);
 
-        World w = p.getWorld();
-        Location start = p.getEyeLocation();
-        p.getInventory().setItemInMainHand(null);
-        Item flying = w.dropItem(start, axe);
+        Location start = player.getEyeLocation();
+        ItemStack copy = axe.clone();
+        player.getInventory().setItemInMainHand(null);
+
+        Item flying = player.getWorld().dropItem(start, copy);
         flying.setPickupDelay(Integer.MAX_VALUE);
         flying.setVelocity(start.getDirection().normalize().multiply(2));
-        w.playSound(p.getLocation(), Sound.ITEM_TRIDENT_RIPTIDE_1, 1, 1);
-        thrown.add(p.getUniqueId());
+        soundAt(player.getLocation(), Sound.ITEM_TRIDENT_RIPTIDE_1, 1f, 1f);
 
+        fly(player, flying, copy);
+    }
+
+    private void fly(Player player, Item flying, ItemStack axe) {
         int maxFlightTicks = getInt("max-flight-ticks");
         double damageMult = getDouble("damage-mult");
+
         new BukkitRunnable() {
             int t = 0;
-            @Override public void run() {
-                if (!flying.isValid() || t > maxFlightTicks) { returnAxe(p, flying); cancel(); return; }
 
-                for (Entity ent : flying.getNearbyEntities(1, 1, 1)) {
-                    if (ent instanceof LivingEntity target && ent != p && canHit(p, target)) {
-                        target.damage(damage(axe) * damageMult, p);
-                        w.spawnParticle(Particle.CRIT, ent.getLocation(), 10);
-                        w.playSound(ent.getLocation(), Sound.ENTITY_PLAYER_HURT, 1, 1);
-                        returnAxe(p, flying);
+            @Override
+            public void run() {
+                if (!flying.isValid() || t++ > maxFlightTicks) {
+                    returnAxe(player, flying);
+                    cancel();
+                    return;
+                }
+
+                for (Entity nearby : flying.getNearbyEntities(1, 1, 1)) {
+                    if (nearby instanceof LivingEntity target && !target.equals(player) && canHit(player, target)) {
+                        target.damage(damage(axe) * damageMult, player);
+                        particles(target.getLocation(), Particle.CRIT, 10, 0);
+                        soundAt(target.getLocation(), Sound.ENTITY_PLAYER_ATTACK_CRIT, 1f, 1f);
+                        returnAxe(player, flying);
                         cancel();
                         return;
                     }
                 }
-                w.spawnParticle(Particle.SWEEP_ATTACK, flying.getLocation(), 2);
-                t++;
+                particles(flying.getLocation(), Particle.SWEEP_ATTACK, 2, 0);
             }
-        }.runTaskTimer(Enchantments.getInstance(), 0, 1);
+        }.runTaskTimer(getPlugin(), 0L, 1L);
     }
 
-    private void returnAxe(Player p, Item flying) {
+    private void returnAxe(Player player, Item flying) {
         int returnTicks = getInt("return-ticks");
         int durabilityCost = getInt("durability-cost");
+
         new BukkitRunnable() {
             int t = 0;
-            @Override public void run() {
-                if (!flying.isValid()) { thrown.remove(p.getUniqueId()); cancel(); return; }
 
-                Vector toPlayer = p.getEyeLocation().toVector().subtract(flying.getLocation().toVector());
-                if (toPlayer.length() < 1.2 || t > returnTicks) {
-                    ItemStack axe = damage(p, flying.getItemStack(), durabilityCost);
-                    flying.remove();
-                    thrown.remove(p.getUniqueId());
-                    if (axe != null) {
-                        Map<Integer, ItemStack> leftover = p.getInventory().addItem(axe);
-                        leftover.values().forEach(i -> p.getWorld().dropItem(p.getLocation(), i));
-                    }
-                    p.getWorld().playSound(p.getLocation(), Sound.ITEM_TRIDENT_THROW, 0.4f, 1);
+            @Override
+            public void run() {
+                if (!flying.isValid()) {
                     cancel();
                     return;
                 }
-                flying.setVelocity(toPlayer.normalize().multiply(1.4));
-                t++;
+
+                Vector toPlayer = player.getEyeLocation().toVector().subtract(flying.getLocation().toVector());
+                if (toPlayer.length() >= 1.2 && t++ <= returnTicks) {
+                    flying.setVelocity(toPlayer.normalize().multiply(1.4));
+                    return;
+                }
+
+                ItemStack axe = damage(player, flying.getItemStack(), durabilityCost);
+                flying.remove();
+                if (axe != null) {
+                    player.getInventory().addItem(axe).values()
+                            .forEach(left -> player.getWorld().dropItem(player.getLocation(), left));
+                }
+                soundAt(player.getLocation(), Sound.ITEM_TRIDENT_THROW, 0.4f, 1f);
+                cancel();
             }
-        }.runTaskTimer(Enchantments.getInstance(), 0, 1);
+        }.runTaskTimer(getPlugin(), 0L, 1L);
     }
 
-    private boolean canHit(Player p, LivingEntity e) {
-        if (e instanceof Player) return true;
-        if (e instanceof Tameable t && t.isTamed() && p.equals(t.getOwner())) return false;
-        return true;
+    private boolean canHit(Player player, LivingEntity entity) {
+        if (entity instanceof Player) return true;
+        return !(entity instanceof Tameable tame && tame.isTamed() && player.equals(tame.getOwner()));
     }
 
     private double damage(ItemStack axe) {
@@ -169,10 +165,12 @@ public final class AxeThrowMechanic extends Mechanic {
         };
     }
 
-    private ItemStack damage(Player p, ItemStack item, int amount) {
-        if (item == null || p.getGameMode() == GameMode.CREATIVE || !(item.getItemMeta() instanceof Damageable d)) return item;
-        d.setDamage(d.getDamage() + amount);
-        item.setItemMeta((org.bukkit.inventory.meta.ItemMeta) d);
-        return d.getDamage() >= item.getType().getMaxDurability() ? null : item;
+    private ItemStack damage(Player player, ItemStack item, int amount) {
+        if (item == null || player.getGameMode() == GameMode.CREATIVE
+                || !(item.getItemMeta() instanceof Damageable meta)) return item;
+
+        meta.setDamage(meta.getDamage() + amount);
+        item.setItemMeta(meta);
+        return meta.getDamage() >= item.getType().getMaxDurability() ? null : item;
     }
 }

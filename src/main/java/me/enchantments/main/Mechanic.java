@@ -1,4 +1,4 @@
-package me.enchantments.mechanics;
+package me.enchantments.main;
 
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
@@ -13,14 +13,12 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import me.enchantments.main.Enchantments;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public abstract class Mechanic implements Listener {
+public abstract class Mechanic extends Triggers implements Listener {
 
     private static final Map<String, Mechanic> REGISTERED_MECHANICS = new ConcurrentHashMap<>();
     private static JavaPlugin plugin = Enchantments.getInstance();
@@ -31,10 +29,6 @@ public abstract class Mechanic implements Listener {
     public static void init(JavaPlugin javaPlugin) {
         plugin = javaPlugin;
     }
-
-    // ==========================================
-    //   ОБОВ'ЯЗКОВІ МЕТАДАНІ МЕХАНІКИ
-    // ==========================================
 
     public abstract String getId();
     public abstract String getName();
@@ -111,10 +105,6 @@ public abstract class Mechanic implements Listener {
         public String datapackId() { return name().toLowerCase(); }
     }
 
-    // ==========================================
-    //   ДЕФОЛТНІ ПАРАМЕТРИ ДЖЕРЕЛ (ОТРИМАННЯ)
-    // ==========================================
-
     public boolean isEnchantingTableAllowed() {
         return true;
     }
@@ -143,10 +133,6 @@ public abstract class Mechanic implements Listener {
         return Collections.emptyMap();
     }
 
-    // ==========================================
-    //   ВАРТІСТЬ ТА НАЛАШТУВАННЯ
-    // ==========================================
-
     public int getAnvilBaseCost() {
         return 8;
     }
@@ -159,28 +145,7 @@ public abstract class Mechanic implements Listener {
         return 10;
     }
 
-    /**
-     * Опціональні data-driven ефекти зачарування (поле "effects" у vanilla enchantment json).
-     * Дозволяє описати прості ефекти декларативно, без @EventHandler, якщо ванільної
-     * системи ефектів достатньо. Пишеться як звичайний JSON-текст (як і решта generate-методів
-     * у DatapackGenerator). За замовчуванням — порожній об'єкт.
-     *
-     * Приклад (аналог ванільної "Гостроти"):
-     * <pre>{@code
-     * @Override
-     * public String getEffects() {
-     *     return """
-     *             {
-     *               "minecraft:damage": [
-     *                 { "effect": { "type": "minecraft:add", "value": {
-     *                     "type": "minecraft:linear", "base": 1.0, "per_level_above_first": 0.5
-     *                 } } }
-     *               ]
-     *             }
-     *             """;
-     * }
-     * }</pre>
-     */
+    /** Data-driven ефекти зачарування — вміст поля "effects" у vanilla json, як звичайний JSON-текст. */
     public String getEffects() {
         return "{}";
     }
@@ -188,10 +153,6 @@ public abstract class Mechanic implements Listener {
     public Map<String, Object> getDefaults() {
         return Collections.emptyMap();
     }
-
-    // ==========================================
-    //   РЕЄСТРАЦІЯ (PlaceholderAPI Style)
-    // ==========================================
 
     protected void onEnable() {}
     protected void onDisable() {}
@@ -254,31 +215,31 @@ public abstract class Mechanic implements Listener {
                 updated = true;
             }
 
-            if (!config.contains("obtaining.enchanting-table.enabled")) { 
-                config.set("obtaining.enchanting-table.enabled", isEnchantingTableAllowed()); 
-                updated = true; 
+            if (!config.contains("obtaining.enchanting-table.enabled")) {
+                config.set("obtaining.enchanting-table.enabled", isEnchantingTableAllowed());
+                updated = true;
             }
-            if (!config.contains("obtaining.enchanting-table.chance")) { 
-                config.set("obtaining.enchanting-table.chance", getEnchantingTableChance()); 
-                updated = true; 
-            }
-
-            if (!config.contains("obtaining.chests.enabled")) { 
-                config.set("obtaining.chests.enabled", isChestLootAllowed()); 
-                updated = true; 
-            }
-            if (!config.contains("obtaining.chests.chance")) { 
-                config.set("obtaining.chests.chance", getChestLootChance()); 
-                updated = true; 
-            }
-            if (!config.contains("obtaining.chests.list")) { 
-                config.set("obtaining.chests.list", getLootChests()); 
-                updated = true; 
+            if (!config.contains("obtaining.enchanting-table.chance")) {
+                config.set("obtaining.enchanting-table.chance", getEnchantingTableChance());
+                updated = true;
             }
 
-            if (!config.contains("obtaining.villagers.enabled")) { 
-                config.set("obtaining.villagers.enabled", isVillagerTradeAllowed()); 
-                updated = true; 
+            if (!config.contains("obtaining.chests.enabled")) {
+                config.set("obtaining.chests.enabled", isChestLootAllowed());
+                updated = true;
+            }
+            if (!config.contains("obtaining.chests.chance")) {
+                config.set("obtaining.chests.chance", getChestLootChance());
+                updated = true;
+            }
+            if (!config.contains("obtaining.chests.list")) {
+                config.set("obtaining.chests.list", getLootChests());
+                updated = true;
+            }
+
+            if (!config.contains("obtaining.villagers.enabled")) {
+                config.set("obtaining.villagers.enabled", isVillagerTradeAllowed());
+                updated = true;
             }
             if (!config.contains("obtaining.villagers.trades")) {
                 Map<String, Map<String, Object>> trades = getVillagerTrades();
@@ -296,6 +257,10 @@ public abstract class Mechanic implements Listener {
             if (!config.contains("weight")) { config.set("weight", getWeight()); updated = true; }
 
             if (!config.contains("hide-enchantment-glint")) { config.set("hide-enchantment-glint", hideEnchantmentGlintDefault()); updated = true; }
+
+            if (!config.contains("grindstone-removable")) { config.set("grindstone-removable", grindstoneRemovableDefault()); updated = true; }
+
+            if (!config.contains("exclusive-with")) { config.set("exclusive-with", getExclusiveWith()); updated = true; }
 
             Map<String, Object> defaults = getDefaults();
             if (defaults != null) {
@@ -322,10 +287,6 @@ public abstract class Mechanic implements Listener {
             this.config = YamlConfiguration.loadConfiguration(configFile);
         }
     }
-
-    // ==========================================
-    //   ЗЧИТУВАННЯ ПАРАМЕТРІВ З КОНФІГУ
-    // ==========================================
 
     public FileConfiguration getConfig() {
         return config;
@@ -364,30 +325,43 @@ public abstract class Mechanic implements Listener {
         return config != null && config.getBoolean("hide-enchantment-glint", hideEnchantmentGlintDefault());
     }
 
+    protected boolean grindstoneRemovableDefault() { return true; }
+
+    public boolean isGrindstoneRemovable() {
+        return config == null || config.getBoolean("grindstone-removable", grindstoneRemovableDefault());
+    }
+
+    /** Несумісні зачарування: `id` своєї механіки, `minecraft:sharpness` або тег `#minecraft:exclusive_set/armor`. */
+    public List<String> getExclusiveWith() {
+        return Collections.emptyList();
+    }
+
+    public List<String> exclusiveWith() {
+        return config != null ? config.getStringList("exclusive-with") : getExclusiveWith();
+    }
+
     public int weight() {
         return config != null ? config.getInt("weight", getWeight()) : getWeight();
     }
 
-    // ==========================================
-    //   ДОПОМІЖНІ МЕТОДИ
-    // ==========================================
+    public Enchantment enchantment() {
+        return RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT)
+                .get(NamespacedKey.fromString("enchantments:" + getId().toLowerCase()));
+    }
 
     public int levelOf(ItemStack item) {
         if (item == null) return 0;
-        Enchantment ench = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT)
-                .get(NamespacedKey.fromString("enchantments:" + getId().toLowerCase()));
+        Enchantment ench = enchantment();
         if (ench == null) return 0;
         return item.getEnchantmentLevel(ench);
     }
 
     public int levelOnPlayer(Player player) {
         if (player == null) return 0;
-        // Check armor slots
         if (levelOf(player.getInventory().getHelmet()) > 0) return levelOf(player.getInventory().getHelmet());
         if (levelOf(player.getInventory().getChestplate()) > 0) return levelOf(player.getInventory().getChestplate());
         if (levelOf(player.getInventory().getLeggings()) > 0) return levelOf(player.getInventory().getLeggings());
         if (levelOf(player.getInventory().getBoots()) > 0) return levelOf(player.getInventory().getBoots());
-        // Check hand
         if (levelOf(player.getInventory().getItemInMainHand()) > 0) return levelOf(player.getInventory().getItemInMainHand());
         if (levelOf(player.getInventory().getItemInOffHand()) > 0) return levelOf(player.getInventory().getItemInOffHand());
         return 0;

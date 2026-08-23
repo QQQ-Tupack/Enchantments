@@ -1,6 +1,5 @@
 package me.enchantments.main;
 
-import me.enchantments.mechanics.Mechanic;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -38,20 +37,12 @@ public final class DatapackGenerator {
         files.put("data/minecraft/tags/enchantment/in_enchanting_table.json",
                 tagOf(mechanics, m -> flag(m, "obtaining.enchanting-table.enabled")));
 
-    //    files.put("data/minecraft/tags/enchantment/on_random_loot.json",
-    //            tagOf(mechanics, m -> flag(m, "obtaining.chests.enabled")
-    //                    && m.getConfig().getStringList("obtaining.chests.list").isEmpty()));
-
         files.put("data/minecraft/tags/enchantment/tradeable.json",
                 tagOf(mechanics, m -> flag(m, "obtaining.villagers.enabled")
                         && m.getConfig().getConfigurationSection("obtaining.villagers.trades") == null));
 
         write(packRoot, files);
     }
-
-    // ==========================================
-    //   ШЛЯХ ДО СВІТУ
-    // ==========================================
 
     private static String levelName() {
         if (!Bukkit.getWorlds().isEmpty()) {
@@ -65,10 +56,6 @@ public final class DatapackGenerator {
         }
         return props.getProperty("level-name", "world");
     }
-
-    // ==========================================
-    //   ЗАПИС
-    // ==========================================
 
     private static void write(Path packRoot, Map<String, String> files) {
         boolean changed = false;
@@ -91,10 +78,6 @@ public final class DatapackGenerator {
                             + "тому ПОТРІБЕН ПОВНИЙ РЕСТАРТ СЕРВЕРА — /reload нових зачарувань не додасть.");
         }
     }
-
-    // ==========================================
-    //   ФАЙЛИ ПАКА
-    // ==========================================
 
     private static String packMcmeta() {
         return """
@@ -142,26 +125,39 @@ public final class DatapackGenerator {
                   "max_level": %d,
                   "min_cost": { "base": 1, "per_level_above_first": 10 },
                   "max_cost": { "base": 50, "per_level_above_first": 10 },
-                  "anvil_cost": %d,
+                  "anvil_cost": %d,%s
                   "slots": [%s],
                   "effects": %s
                 }
-                """.formatted(desc, itemsTag, itemsTag, m.weight(), maxLevel, anvilCost, slots, effects);
+                """.formatted(desc, itemsTag, itemsTag, m.weight(), maxLevel, anvilCost,
+                        exclusiveSetJson(m), slots, effects);
+    }
+
+    private static String exclusiveSetJson(Mechanic m) {
+        List<String> ids = m.exclusiveWith().stream()
+                .filter(id -> id != null && !id.isBlank())
+                .map(DatapackGenerator::enchantmentId)
+                .toList();
+
+        if (ids.isEmpty()) return "";
+        if (ids.size() == 1) return "\n  \"exclusive_set\": \"" + ids.get(0) + "\",";
+
+        return "\n  \"exclusive_set\": ["
+                + ids.stream().map(id -> "\"" + id + "\"").collect(Collectors.joining(", ")) + "],";
+    }
+
+    private static String enchantmentId(String raw) {
+        String id = raw.trim();
+        return id.startsWith("#") || id.contains(":") ? id : "enchantments:" + id.toLowerCase();
     }
 
     private static String itemTagJson(Mechanic m) {
-        // resolveItems() уже врахував винятки: або supported мінус excluded,
-        // або (якщо supported порожній) усі предмети гри мінус excluded
         List<String> ids = m.resolveItems().stream()
                 .map(material -> "minecraft:" + material.name().toLowerCase())
                 .sorted()
                 .toList();
         return valuesJson(ids);
     }
-
-    // ==========================================
-    //   ТЕГИ
-    // ==========================================
 
     private static boolean flag(Mechanic m, String path) {
         return m.getConfig().getBoolean(path, true);

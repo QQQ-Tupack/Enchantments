@@ -23,21 +23,14 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import me.enchantments.main.Mechanic;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Проклятий меч, що живиться вбитими.
- *
- * Кожен удар віддає власнику краплю життя, кожне вбивство лишає в клинку душу.
- * Накопичені душі роблять бурю довшою й нищівнішою і згорають разом із нею —
- * тобто меч треба "заряджати" боєм, а не просто носити.
- *
- * Лічильник душ живе в самому предметі, тож нічого не треба тримати в пам'яті плагіна.
- */
 public final class SoulStormMechanic extends Mechanic {
 
     private static final NamespacedKey SOULS = new NamespacedKey("enchantments", "soul_storm_souls");
@@ -92,12 +85,8 @@ public final class SoulStormMechanic extends Mechanic {
     @Override public boolean isChestLootAllowed() { return false; }
     @Override public boolean isVillagerTradeAllowed() { return false; }
     @Override public int getAnvilBaseCost() { return 25; }
+    @Override protected boolean grindstoneRemovableDefault() { return false; }
 
-    // ==========================================
-    //   ПОГЛИНАННЯ ДУШ
-    // ==========================================
-
-    /** Будь-який удар клинком повертає частку завданого — тим більше, чим сильніший удар. */
     @EventHandler(ignoreCancelled = true)
     public void onHit(EntityDamageByEntityEvent e) {
         if (!isMechanicEnabled()) return;
@@ -117,7 +106,6 @@ public final class SoulStormMechanic extends Mechanic {
         player.setHealth(Math.min(max, player.getHealth() + heal));
         player.getWorld().spawnParticle(Particle.SCULK_SOUL, player.getLocation().add(0, 1.6, 0), 2, 0.2, 0.2, 0.2, 0.01);
 
-        // тихий ковток: чути тільки самому власнику, щоб не забивати звук бою
         player.playSound(player.getLocation(), Sound.ENTITY_ALLAY_ITEM_TAKEN, 0.35f, 0.7f);
     }
 
@@ -142,10 +130,6 @@ public final class SoulStormMechanic extends Mechanic {
         absorbSound(killer, stored);
     }
 
-    /**
-     * Висота тону росте разом із кількістю душ — заповнення клинка чути на слух,
-     * без жодного лічильника на екрані. На повному клинку тембр змінюється остаточно.
-     */
     private void absorbSound(Player killer, int stored) {
         int max = Math.max(1, getInt("max-souls"));
         float progress = Math.min(1f, (float) stored / max);
@@ -155,11 +139,9 @@ public final class SoulStormMechanic extends Mechanic {
         killer.playSound(at, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.4f, 0.7f + progress * 1.1f);
 
         if (stored >= max) {
-            // клинок повний — далі душі не збираються, і це має бути чутно однозначно
             killer.playSound(at, Sound.BLOCK_BEACON_ACTIVATE, 0.6f, 1.6f);
             killer.playSound(at, Sound.ENTITY_WITHER_SPAWN, 0.25f, 1.8f);
         } else if (stored % 5 == 0) {
-            // кожна п'ята душа — окрема віха
             killer.playSound(at, Sound.BLOCK_NOTE_BLOCK_CHIME, 0.5f, 0.8f + progress);
         }
     }
@@ -177,13 +159,6 @@ public final class SoulStormMechanic extends Mechanic {
         sword.setItemMeta(meta);
     }
 
-    // ==========================================
-    //   ВИВІЛЬНЕННЯ
-    // ==========================================
-
-    // ignoreCancelled тут ставити не можна: при ПКМ по повітрю Bukkit виставляє
-    // useItemInHand у DENY, і подія приходить уже "скасованою" — саме тому здібності
-    // спрацьовували лише коли дивишся на блок
     @EventHandler(priority = EventPriority.LOWEST)
     public void onUse(PlayerInteractEvent e) {
         if (!isMechanicEnabled()) return;
@@ -212,7 +187,6 @@ public final class SoulStormMechanic extends Mechanic {
         new Storm(player, level, souls).runTaskTimer(getPlugin(), 0L, 1L);
     }
 
-    /** Вихор — рухома точка, а не сутність: нічого не спавнить і не потребує прибирання. */
     private final class Storm extends BukkitRunnable {
 
         private final Player caster;
@@ -252,7 +226,6 @@ public final class SoulStormMechanic extends Mechanic {
             damage();
         }
 
-        /** Кількість витків прямо показує, скільки душ пішло в удар. */
         private void spiral() {
             int arms = 3 + Math.min(5, souls / 4);
             double radius = getDouble("radius") * 0.6;

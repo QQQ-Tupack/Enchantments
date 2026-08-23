@@ -1,3 +1,105 @@
-# Enchantments Configuration
-# This config is no longer used - mechanics now self-register with their own defaults
-# All configuration is handled by individual mechanics and their YAML files in plugins/Enchantments/mechanics/
+# ==============================================================
+#  book-info — книга з описом зачарування (ПКМ по зачарованій книзі)
+#  Один набір сторінок для КАСТОМНИХ і ВАНІЛЬНИХ зачарувань:
+#  обидва джерела дають однакові плейсхолдери, а те, чого в джерела
+#  немає, підставляється як <empty>.
+#
+#  Усі тексти йдуть через <lang_or:ключ:'фолбек'> — якщо ключ є в
+#  мовному файлі ресурспака, гравець побачить переклад своєю мовою,
+#  інакше — фолбек звідси. Так само працюють назва й опис самого
+#  зачарування (ключі enchantment.<namespace>.<id>[.description]).
+# ==============================================================
+book-info:
+  include-vanilla: true
+
+  hint:
+    cooldown-minutes: 30
+    message: "<white><sprite:items:item/enchanted_book> <yellow><lang_or:enchantments.book.hint:'У вас є книга зачарування — ПКМ по ній, щоб дізнатись деталі.'>"
+
+  title: "<name>"
+  author: "QQQ-CRAFT"
+  list-item: "<dark_gray>  - <black>{value}"
+  empty: "<dark_gray>-"
+  label-yes: "<white><sprite:items:item/lime_dye> <dark_purple><lang_or:enchantments.book.yes:'так'>"
+  label-no: "<white><sprite:items:item/red_dye> <dark_purple><lang_or:enchantments.book.no:'ні'>"
+  label-all-items: "<lang_or:enchantments.book.all_items:'Усі предмети'>"
+  unknown-description: "Опис цього зачарування ще не додано."
+
+  pages:
+    - |
+      <white><sprite:items:item/enchanted_book> <gold><bold><name> <level></bold></gold>
+      <dark_gray><italic><id></italic>
+      <dark_gray><st>                   </st>
+      <black><description>
+      <dark_gray><st>                   </st>
+      <white><sprite:items:item/experience_bottle> <black><lang_or:enchantments.book.max_level:'Макс. рівень'>: <dark_purple><max-level>
+      <white><sprite:blocks:block/anvil_top> <black><lang_or:enchantments.book.anvil:'Ковадло'>: <dark_purple><anvil-cost>
+    - |
+      <white><sprite:items:item/diamond_pickaxe> <gold><bold><lang_or:enchantments.book.items:'Предмети'></bold></gold>
+      <dark_gray><st>                   </st>
+      <items>
+
+      <white><sprite:items:item/barrier> <black><lang_or:enchantments.book.excluded:'Виключено'>:
+      <excluded-items>
+
+      <white><sprite:items:item/structure_void> <black><lang_or:enchantments.book.incompatible:'Несумісне'>:
+      <incompatible>
+    - |
+      <white><sprite:items:item/ender_eye> <gold><bold><lang_or:enchantments.book.obtaining:'Отримання'></bold></gold>
+      <dark_gray><st>                   </st>
+      <white><sprite:blocks:block/enchanting_table_top> <black><lang_or:enchantments.book.table:'Стіл'>: <dark_purple><table-chance>
+      <white><sprite:items:item/chest_minecart> <black><lang_or:enchantments.book.chests:'Скрині'>: <dark_purple><chest-chance>
+      <loot-chests>
+      <white><sprite:items:item/emerald> <black><lang_or:enchantments.book.trade:'Торгівля'>: <dark_purple><villager-trade>
+      <villager-professions>
+
+  # Фолбек-назви ванільних зачарувань. Порожньо = беремо назву з реєстру
+  # (вона й так перекладена клієнтом). Заповнюй лише те, що хочеш перейменувати.
+  names: {}
+
+  # Фолбек-описи. Єдине, чого немає в грі взагалі — цей текст ніде не існує,
+  # ні в реєстрі, ні в мовних файлах. Ключ = id зачарування.
+  # Кастомні механіки беруть фолбек зі свого власного getDescription().
+  descriptions:
+    protection: "Зменшує майже будь-яку вхідну шкоду: удари, падіння, вогонь, вибухи."
+    fire_protection: "Зменшує шкоду від вогню й лави та скорочує час горіння."
+    blast_protection: "Зменшує шкоду й відкидання від вибухів кріперів, TNT і ложе в Незері."
+    projectile_protection: "Зменшує шкоду від стріл, тризубів і вогняних куль."
+    feather_falling: "Сильно зменшує шкоду від падіння та ендер-перлів."
+    respiration: "Подовжує час під водою й покращує зір під нею."
+    aqua_affinity: "Прибирає штраф до швидкості копання, коли ви у воді."
+    thorns: "Відбиває частину шкоди назад атакуючому, але швидше псує броню."
+    depth_strider: "Прискорює рух під водою."
+    frost_walker: "Заморожує воду під ногами, утворюючи тимчасовий лід."
+    soul_speed: "Пришвидшує біг по піску душ і ґрунті душ, але витрачає міцність."
+    swift_sneak: "Дозволяє рухатися присівши майже зі звичайною швидкістю."
+    binding_curse: "Одягнений предмет неможливо зняти, доки він не зламається або ви не помрете."
+    sharpness: "Додає шкоди по всіх істотах."
+    smite: "Значно збільшує шкоду по нежиті: зомбі, скелети, візери."
+    bane_of_arthropods: "Додаткова шкода павукам, сріблянкам і черв'якам плюс сповільнення."
+    knockback: "Сильніше відкидає ворогів від удару."
+    fire_aspect: "Підпалює ціль, а з мобів частіше падає приготована їжа."
+    looting: "Збільшує кількість і шанс рідкісного дропу з убитих мобів."
+    sweeping_edge: "Посилює шкоду розмашистої атаки по кількох цілях одразу."
+    efficiency: "Пришвидшує копання відповідними блоками."
+    silk_touch: "Блоки випадають такими, як є: скло, лід, руди, гнізда бджіл."
+    fortune: "Збільшує кількість ресурсів з руд, культур і трави."
+    unbreaking: "Дає шанс не витратити одиницю міцності — предмет служить довше."
+    power: "Збільшує шкоду від стріл."
+    punch: "Стріли сильніше відкидають ціль назад."
+    flame: "Стріли підпалюють ціль."
+    infinity: "Стрільба не витрачає звичайні стріли, якщо є хоча б одна."
+    multishot: "Один постріл випускає три стріли віялом."
+    piercing: "Стріли проходять крізь кілька цілей і їх можна підібрати."
+    quick_charge: "Скорочує час перезарядки арбалета."
+    loyalty: "Кинутий тризуб повертається до вас."
+    impaling: "Додаткова шкода водним істотам і мобам, що стоять у воді чи під дощем."
+    riptide: "У воді або під дощем кидає вас разом з тризубом уперед."
+    channeling: "Влучання під час грози викликає блискавку в ціль."
+    density: "Збільшує шкоду від удару в стрибку залежно від висоти падіння."
+    breach: "Зменшує ефективність броні цілі при ударі."
+    wind_burst: "Після удару підкидає вас угору — можна бити серіями."
+    luck_of_the_sea: "Підвищує шанс виловити скарб замість сміття."
+    lure: "Риба клює помітно швидше."
+    mending: "Отриманий досвід ремонтує предмет замість поповнення рівнів."
+    vanishing_curse: "Предмет зникає назавжди, коли ви помираєте."

@@ -1,14 +1,17 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.enchantments.main.Mechanic;
+
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
 import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Wolf;
@@ -23,45 +26,18 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** Нюхання контейнерів вовком - виявляє сундуки з певним предметом */
 public final class WolfSniffMechanic extends Mechanic {
 
-    @Override
-    public String getId() {
-        return "wolf_sniff";
-    }
-
-    @Override
-    public String getName() {
-        return "Гострий нюх";
-    }
-
-    @Override
-    public String getDescription() {
-        return "Дозволяє вовку знаходити контейнери з певним предметом";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 3;
-    }
-
-    @Override
-    public List<Material> getSupportedItems() {
-        return List.of(Material.WOLF_ARMOR);
-    }
-
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.BODY);
-    }
+    @Override public String getId() { return "wolf_sniff"; }
+    @Override public String getName() { return "Гострий нюх"; }
+    @Override public String getDescription() { return "Дозволяє вовку знаходити контейнери з певним предметом"; }
+    @Override public int getMaxLevel() { return 3; }
+    @Override public List<Material> getSupportedItems() { return List.of(Material.WOLF_ARMOR); }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.BODY); }
 
     @Override
     public Map<String, Object> getDefaults() {
-        return Map.of(
-            "radius", 50.0,
-            "glow-ticks", 200
-        );
+        return Map.of("radius", 50.0, "glow-ticks", 200);
     }
 
     private ItemStack armor(Wolf wolf) {
@@ -76,32 +52,32 @@ public final class WolfSniffMechanic extends Mechanic {
     public void onSniff(PlayerInteractEntityEvent e) {
         if (!isMechanicEnabled()) return;
         if (!(e.getRightClicked() instanceof Wolf wolf) || !guarded(wolf)) return;
+
         Player player = e.getPlayer();
         if (!wolf.isTamed() || !wolf.getOwner().equals(player)) return;
 
         ItemStack held = player.getInventory().getItemInMainHand();
-        boolean emptyHand = held.getType() == Material.AIR;
+        if (!player.isSneaking() || held.getType() == Material.AIR) return;
 
-        if (player.isSneaking() && !emptyHand) {
-            e.setCancelled(true);
-            sniff(player, wolf, held.getType());
-        }
+        e.setCancelled(true);
+        sniff(player, wolf, held.getType());
     }
 
     private void sniff(Player player, Wolf wolf, Material target) {
-        double sniffRadius = getDouble("radius");
-        int sniffGlowTicks = getInt("glow-ticks");
+        double radius = getDouble("radius");
+        int glowTicks = getInt("glow-ticks");
         World world = wolf.getWorld();
-        world.playSound(wolf.getLocation(), "entity.sniffer.sniffing", 1.0f, 1.4f);
         Location center = player.getLocation();
-        List<org.bukkit.entity.Entity> markers = new ArrayList<>();
 
-        for (org.bukkit.Chunk chunk : world.getLoadedChunks()) {
-            if (Math.abs((chunk.getX() << 4) + 8 - center.getBlockX()) > sniffRadius + 16) continue;
-            if (Math.abs((chunk.getZ() << 4) + 8 - center.getBlockZ()) > sniffRadius + 16) continue;
+        world.playSound(wolf.getLocation(), "entity.sniffer.sniffing", 1.0f, 1.4f);
+
+        List<Entity> markers = new ArrayList<>();
+        for (Chunk chunk : world.getLoadedChunks()) {
+            if (Math.abs((chunk.getX() << 4) + 8 - center.getBlockX()) > radius + 16) continue;
+            if (Math.abs((chunk.getZ() << 4) + 8 - center.getBlockZ()) > radius + 16) continue;
 
             for (BlockState state : chunk.getTileEntities()) {
-                if (!(state instanceof Container container) || state.getLocation().distance(center) > sniffRadius) continue;
+                if (!(state instanceof Container container) || state.getLocation().distance(center) > radius) continue;
                 boolean hasItem = Arrays.stream(container.getInventory().getContents())
                         .anyMatch(stack -> stack != null && stack.getType() == target);
                 if (!hasItem) continue;
@@ -115,12 +91,15 @@ public final class WolfSniffMechanic extends Mechanic {
         }
 
         if (markers.isEmpty()) {
-            player.sendActionBar(Component.text("Вовк нічого не знайшов поблизу...", NamedTextColor.GRAY));
+            soundFor(player, Sound.ENTITY_WOLF_WHINE, 0.6f, 1.1f);
             return;
         }
-        player.sendActionBar(Component.text("Вовк учув " + markers.size() + " скриню(ь) з цим предметом!", NamedTextColor.YELLOW));
+
+        soundFor(player, Sound.ENTITY_WOLF_AMBIENT, 0.8f, 1.3f);
+        particles(wolf.getLocation().add(0, 0.6, 0), Particle.HAPPY_VILLAGER, 12, 0.4, 0.3, 0.4, 0);
+
         new BukkitRunnable() {
-            @Override public void run() { markers.forEach(org.bukkit.entity.Entity::remove); }
-        }.runTaskLater(Enchantments.getInstance(), sniffGlowTicks);
+            @Override public void run() { markers.forEach(Entity::remove); }
+        }.runTaskLater(getPlugin(), glowTicks);
     }
 }

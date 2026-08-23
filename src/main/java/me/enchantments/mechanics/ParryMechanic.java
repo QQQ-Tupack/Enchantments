@@ -1,6 +1,7 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -25,7 +26,6 @@ public final class ParryMechanic extends Mechanic {
 
     private final Map<UUID, Map<UUID, Attack>> windows = new HashMap<>();
     private final Set<UUID> replaying = new HashSet<>();
-    private final Set<UUID> cooldown = new HashSet<>();
 
     @Override
     public String getId() {
@@ -39,7 +39,7 @@ public final class ParryMechanic extends Mechanic {
 
     @Override
     public String getDescription() {
-        return "Дозволяє гравцю парирувати удари щитом та наносити шкоду атакуючому";
+        return "Дозволяє гравцю парирувати удари щитом та наносити шкоду атакуючому.";
     }
 
     @Override
@@ -82,8 +82,10 @@ public final class ParryMechanic extends Mechanic {
         if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Player player) || e.isCancelled()) return;
         UUID uid = player.getUniqueId();
-        if (replaying.contains(uid) || cooldown.contains(uid) || player.isBlocking()) return;
-        if (levelOf(shield(player)) == 0) return;
+        if (replaying.contains(uid) || player.isBlocking()) return;
+
+        ItemStack shield = shield(player);
+        if (levelOf(shield) == 0 || !ready(player, shield)) return;
 
         UUID attackerId = e.getDamager() instanceof LivingEntity ? e.getDamager().getUniqueId() : null;
         if (attackerId == null) return;
@@ -92,7 +94,7 @@ public final class ParryMechanic extends Mechanic {
         if (window == null) {
             window = new HashMap<>();
             windows.put(uid, window);
-            openWindow(player);
+            openWindow(player, shield);
         } else if (window.containsKey(attackerId)) {
             return;
         }
@@ -100,33 +102,33 @@ public final class ParryMechanic extends Mechanic {
         window.put(attackerId, new Attack(e.getDamager(), e.getFinalDamage()));
     }
 
-    private void openWindow(Player player) {
+    private void openWindow(Player player, ItemStack shield) {
         UUID uid = player.getUniqueId();
         int windowTicks = getInt("window-ticks");
         new BukkitRunnable() {
             int t = 0;
             @Override public void run() {
                 if (!windows.containsKey(uid)) { cancel(); return; }
-                if (!player.isOnline() || player.isDead()) { fail(player); cancel(); return; }
-                if (player.isBlocking()) { succeed(player); cancel(); return; }
-                if (++t >= windowTicks) { fail(player); cancel(); }
+                if (!player.isOnline() || player.isDead()) { fail(player, shield); cancel(); return; }
+                if (player.isBlocking()) { succeed(player, shield); cancel(); return; }
+                if (++t >= windowTicks) { fail(player, shield); cancel(); }
             }
-        }.runTaskTimer(Enchantments.getInstance(), 1, 1);
+        }.runTaskTimer(getPlugin(), 1, 1);
     }
 
-    private void succeed(Player player) {
+    private void succeed(Player player, ItemStack shield) {
         Map<UUID, Attack> window = windows.remove(player.getUniqueId());
         if (window == null) return;
 
-        int shieldDamage = getInt("shield-damage");
+        damageShield(shield, getInt("shield-damage"));
         double counterDamage = getDouble("counter-damage");
         double counterRange = getDouble("counter-range");
         double knockbackMult = getDouble("knockback-mult");
         double knockbackMinY = getDouble("knockback-min-y");
 
-        damageShield(player, shieldDamage);
-        player.getWorld().playSound(player.getLocation(), Sound.ITEM_SHIELD_BLOCK, 1.5f, 0.8f);
-        player.getWorld().spawnParticle(Particle.CRIT, player.getLocation().add(0, 1, 0), 50, 0.5, 0.5, 0.5, 0.1);
+        activation(player);
+        soundAt(player.getLocation(), Sound.ITEM_SHIELD_BLOCK, 1.5f, 0.8f);
+        particles(player.getLocation().add(0, 1, 0), Particle.CRIT, 50, 0.5);
 
         for (Attack a : window.values()) {
             if (!(a.damager() instanceof LivingEntity attacker) || !attacker.isValid()) continue;
@@ -139,33 +141,29 @@ public final class ParryMechanic extends Mechanic {
         }
     }
 
-    private void fail(Player player) {
+    private void fail(Player player, ItemStack shield) {
         Map<UUID, Attack> window = windows.remove(player.getUniqueId());
         if (window == null) return;
 
-        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 0.5f);
+        deny(player);
         UUID uid = player.getUniqueId();
-        cooldown.add(uid);
-
-        int replayDelayStepTicks = getInt("replay-delay-step-ticks");
-        int failCooldownTicks = getInt("fail-cooldown-ticks");
+        if (shield != null) cooldown(player, shield, getInt("fail-cooldown-ticks"));
 
         int delay = 0;
+        int replayStep = getInt("replay-delay-step-ticks");
         for (Attack a : window.values()) {
             if (!a.damager().isValid()) continue;
             int currentDelay = delay;
-            Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> {
+            Bukkit.getScheduler().runTaskLater(getPlugin(), () -> {
                 if (!player.isOnline() || player.isDead() || !a.damager().isValid()) return;
                 replaying.add(uid);
                 try { player.damage(a.damage(), a.damager()); } finally { replaying.remove(uid); }
             }, currentDelay);
-            delay += replayDelayStepTicks;
+            delay += replayStep;
         }
-        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> cooldown.remove(uid), failCooldownTicks);
     }
 
-    private void damageShield(Player player, int amount) {
-        ItemStack shield = shield(player);
+    private void damageShield(ItemStack shield, int amount) {
         if (shield == null || !(shield.getItemMeta() instanceof Damageable d)) return;
         int newDamage = d.getDamage() + amount;
         if (newDamage >= shield.getType().getMaxDurability()) shield.setAmount(0);
@@ -175,10 +173,9 @@ public final class ParryMechanic extends Mechanic {
     public void shutdown() {
         for (UUID uid : new ArrayList<>(windows.keySet())) {
             Player player = Bukkit.getPlayer(uid);
-            if (player != null) fail(player);
+            if (player != null) fail(player, shield(player));
         }
         windows.clear();
         replaying.clear();
-        cooldown.clear();
     }
 }

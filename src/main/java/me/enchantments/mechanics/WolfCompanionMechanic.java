@@ -15,37 +15,16 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
+import me.enchantments.main.Mechanic;
+
 public final class WolfCompanionMechanic extends Mechanic {
 
-    @Override
-    public String getId() {
-        return "wolf_companion";
-    }
-
-    @Override
-    public String getName() {
-        return "Вірна дружба";
-    }
-
-    @Override
-    public String getDescription() {
-        return "Вовк отримує захист від випадкових атак власника";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 3;
-    }
-
-    @Override
-    public List<Material> getSupportedItems() {
-        return List.of(Material.WOLF_ARMOR);
-    }
-
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.BODY);
-    }
+    @Override public String getId() { return "wolf_companion"; }
+    @Override public String getName() { return "Вірна дружба"; }
+    @Override public String getDescription() { return "Вовк отримує захист від випадкових атак власника"; }
+    @Override public int getMaxLevel() { return 3; }
+    @Override public List<Material> getSupportedItems() { return List.of(Material.WOLF_ARMOR); }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.BODY); }
 
     @Override
     public Map<String, Object> getDefaults() {
@@ -70,16 +49,16 @@ public final class WolfCompanionMechanic extends Mechanic {
     public void onWolfAttack(EntityDamageByEntityEvent e) {
         if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Wolf wolf) || !(e.getDamager() instanceof Player player)) return;
-        boolean protectFromOwnerDamage = getBoolean("protect-from-owner-damage");
-        if (protectFromOwnerDamage && guarded(wolf) && player.equals(wolf.getOwner())) e.setCancelled(true);
+        if (getBoolean("protect-from-owner-damage") && guarded(wolf) && player.equals(wolf.getOwner())) {
+            e.setCancelled(true);
+        }
     }
 
     @EventHandler
     public void onWolfTarget(EntityTargetEvent e) {
         if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Wolf wolf) || !guarded(wolf)) return;
-        boolean protectNamedTarget = getBoolean("protect-named-target");
-        if (!protectNamedTarget) return;
+        if (!getBoolean("protect-named-target")) return;
         if (e.getTarget() != null && e.getTarget().customName() != null) e.setCancelled(true);
     }
 
@@ -88,16 +67,15 @@ public final class WolfCompanionMechanic extends Mechanic {
         if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Wolf wolf) || !guarded(wolf)) return;
 
-        boolean protectFromOwnerProjectiles = getBoolean("protect-from-owner-projectiles");
-        boolean protectSuffocation = getBoolean("protect-suffocation");
-
-        if (protectFromOwnerProjectiles && e.getCause() == EntityDamageEvent.DamageCause.PROJECTILE
+        if (getBoolean("protect-from-owner-projectiles") && e.getCause() == EntityDamageEvent.DamageCause.PROJECTILE
                 && e instanceof EntityDamageByEntityEvent byEntity
                 && byEntity.getDamager() instanceof Projectile proj
                 && proj.getShooter() instanceof Player shooter && shooter.equals(wolf.getOwner())) {
             e.setCancelled(true);
         }
-        if (protectSuffocation && e.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION) e.setCancelled(true);
+        if (getBoolean("protect-suffocation") && e.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION) {
+            e.setCancelled(true);
+        }
     }
 
     @EventHandler

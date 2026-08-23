@@ -1,14 +1,18 @@
 package me.enchantments.mechanics;
 
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityCategory;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
@@ -16,8 +20,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.HashSet;
 import java.util.List;
@@ -29,9 +37,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Ланцюг душ.
  *
- * Убитий монстр не віддає душу гравцю — вона зривається з тіла і світловою дугою
- * б'є в наступного ворога поблизу, звідти в наступного, і так до чотирьох цілей.
- * Нежить від дотику душі спалахує.
+ * Убитий монстр не віддає душу гравцю — вона зривається з тіла і летить дугою до наступного
+ * ворога поблизу, б'є з відкиданням, і з нього до наступного.
  *
  * Смерть від самого ланцюга нової дуги не породжує — жертва позначається в PDC,
  * інакше зачистка спавнера перетворилася б на нескінченну реакцію.
@@ -41,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RadiantAuraMechanic extends Mechanic {
 
     private static final NamespacedKey CHAINED = new NamespacedKey("enchantments", "soul_chained");
+    private static final Color SOUL = Color.fromRGB(0x5FF4E0);
 
     private final Map<UUID, Long> readyAt = new ConcurrentHashMap<>();
 
@@ -56,7 +64,7 @@ public final class RadiantAuraMechanic extends Mechanic {
 
     @Override
     public String getDescription() {
-        return "Убитий ворог відпускає душу — вона стрибає від цілі до цілі, спалюючи нежить";
+        return "Убитий ворог відпускає душу — вона влітає в наступних, розкидаючи їх";
     }
 
     @Override
@@ -77,11 +85,12 @@ public final class RadiantAuraMechanic extends Mechanic {
     @Override
     public Map<String, Object> getDefaults() {
         return Map.of(
-            "max-jumps", 4,
-            "jump-range", 7.0,
+            "max-jumps", 3,
+            "jump-range", 10.0,
+            "soul-speed", 0.9,
+            "knockback", 0.9,
             "damage", 4.5,
             "damage-falloff", 0.8,
-            "undead-burn-seconds", 4,
             "cooldown-ticks", 40
         );
     }
@@ -121,16 +130,10 @@ public final class RadiantAuraMechanic extends Mechanic {
         return 12;
     }
 
-    // ==========================================
-    //   ЗАПУСК ЛАНЦЮГА
-    // ==========================================
-
     @EventHandler
     public void onKill(EntityDeathEvent e) {
         if (!isMechanicEnabled()) return;
         if (!(e.getEntity() instanceof Monster monster)) return;
-
-        // смерть від самої душі нового ланцюга не починає
         if (monster.getPersistentDataContainer().has(CHAINED, PersistentDataType.BYTE)) return;
 
         Player killer = monster.getKiller();
@@ -142,23 +145,32 @@ public final class RadiantAuraMechanic extends Mechanic {
         readyAt.put(killer.getUniqueId(), now + getInt("cooldown-ticks"));
 
         Location origin = monster.getLocation().add(0, 0.9, 0);
-        origin.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, origin, 20, 0.2, 0.2, 0.2, 0.05);
-        origin.getWorld().spawnParticle(Particle.FLASH, origin, 1);
+        origin.getWorld().spawnParticle(Particle.FLASH, origin, 1, SOUL);
         origin.getWorld().playSound(origin, Sound.BLOCK_SOUL_SAND_BREAK, 1.0f, 1.6f);
+        origin.getWorld().playSound(origin, Sound.ENTITY_WARDEN_SONIC_CHARGE, 0.6f, 1.8f);
 
         Set<UUID> visited = new HashSet<>();
         visited.add(monster.getUniqueId());
 
-        new Chain(killer, origin, visited).runTaskTimer(getPlugin(), 3L, 4L);
+        new Chain(killer, origin, visited).runTaskTimer(getPlugin(), 3L, 1L);
     }
 
-    /** Душа шукає найближчого ворога попереду себе, б'є і летить далі — по одному стрибку раз на 4 тіки. */
+    /**
+     * Душа летить сама: щотіка проходить soul-speed блоків уздовж дуги до обраної цілі
+     * і б'є лише коли долітає. Ціль весь політ ведеться, тож від рухомої вона не відстає.
+     */
     private final class Chain extends BukkitRunnable {
 
         private final Player killer;
         private final Set<UUID> visited;
 
         private Location from;
+        private ItemDisplay orb;
+        private LivingEntity target;
+        private Location to;
+        private double lift;
+        private double step;
+        private double flown;
         private double damage;
         private int jump;
 
@@ -167,31 +179,52 @@ public final class RadiantAuraMechanic extends Mechanic {
             this.from = origin;
             this.visited = visited;
             this.damage = getDouble("damage");
+            this.orb = spawnOrb(origin);
         }
 
         @Override
         public void run() {
-            if (!killer.isOnline() || jump >= getInt("max-jumps")) {
+            if (!killer.isOnline()) {
+                fade();
+                cancel();
+                return;
+            }
+            if (target != null && (target.isDead() || !target.isValid())) target = null;
+            if (target == null && !aim()) {
                 fade();
                 cancel();
                 return;
             }
 
-            LivingEntity target = nextTarget();
-            if (target == null) {
-                fade();
-                cancel();
+            to = target.getLocation().add(0, target.getHeight() * 0.6, 0);
+            flown += step;
+
+            if (flown < 1) {
+                fly(point(flown));
                 return;
             }
 
-            Location to = target.getLocation().add(0, target.getHeight() * 0.6, 0);
-            drawArc(from, to);
             strike(target, to);
-
             visited.add(target.getUniqueId());
             from = to;
+            target = null;
             damage *= getDouble("damage-falloff");
             jump++;
+        }
+
+        private boolean aim() {
+            if (jump >= getInt("max-jumps")) return false;
+
+            target = nextTarget();
+            if (target == null) return false;
+
+            double distance = from.distance(target.getLocation());
+            lift = 0.6 + distance * 0.12;
+            step = getDouble("soul-speed") / Math.max(distance, 0.5);
+            flown = 0;
+
+            from.getWorld().playSound(from, Sound.ENTITY_EVOKER_CAST_SPELL, 0.8f, 1.5f);
+            return true;
         }
 
         private LivingEntity nextTarget() {
@@ -214,52 +247,75 @@ public final class RadiantAuraMechanic extends Mechanic {
             return best;
         }
 
+        /** Точка на дузі: пряма від попередньої цілі до наступної плюс провисання синусом. */
+        private Location point(double at) {
+            Location point = from.clone().add(to.clone().subtract(from).toVector().multiply(at));
+            return point.add(0, Math.sin(Math.PI * at) * lift, 0);
+        }
+
+        private void fly(Location at) {
+            at.setYaw(0);
+            at.setPitch(0);
+            if (orb == null) orb = spawnOrb(at);
+            else orb.teleport(at);
+        }
+
+        private ItemDisplay spawnOrb(Location at) {
+            return at.getWorld().spawn(at, ItemDisplay.class, display -> {
+                display.setItemStack(new ItemStack(Material.NETHER_STAR));
+                display.setBillboard(Display.Billboard.CENTER);
+                display.setBrightness(new Display.Brightness(15, 15));
+                display.setGlowing(true);
+                display.setGlowColorOverride(SOUL);
+                display.setTransformation(new Transformation(
+                        new Vector3f(), new Quaternionf(), new Vector3f(1.0f, 1.0f, 1.0f), new Quaternionf()));
+                display.setTeleportDuration(1);
+                display.setPersistent(false);
+            });
+        }
+
         private void strike(LivingEntity target, Location at) {
             target.getPersistentDataContainer().set(CHAINED, PersistentDataType.BYTE, (byte) 1);
             target.damage(damage, killer);
 
-            if (target.getCategory() == EntityCategory.UNDEAD) {
-                target.setFireTicks(Math.max(target.getFireTicks(), getInt("undead-burn-seconds") * 20));
-            }
+            Vector push = at.toVector().subtract(from.toVector()).normalize().multiply(getDouble("knockback"));
+            target.setVelocity(push.setY(Math.max(0.4, push.getY())));
 
-            at.getWorld().spawnParticle(Particle.FLASH, at, 1);
-            at.getWorld().spawnParticle(Particle.END_ROD, at, 18, 0.2, 0.2, 0.2, 0.06);
-            at.getWorld().spawnParticle(Particle.SOUL, at, 8, 0.25, 0.25, 0.25, 0.02);
-            at.getWorld().playSound(at, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 0.8f + jump * 0.25f);
-            at.getWorld().playSound(at, Sound.ENTITY_ILLUSIONER_CAST_SPELL, 0.6f, 1.5f);
+            burst();
+            at.getWorld().spawnParticle(Particle.FLASH, at, 1, SOUL);
+            at.getWorld().playSound(at, Sound.ENTITY_WARDEN_SONIC_BOOM, 0.7f, 1.3f + jump * 0.2f);
+            at.getWorld().playSound(at, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 1.0f, 1.4f);
 
             flash(at);
         }
 
-        /** Дуга з провисанням — душа не летить по прямій, а перекидається через повітря. */
-        private void drawArc(Location start, Location end) {
-            Vector delta = end.toVector().subtract(start.toVector());
-            int steps = Math.max(8, (int) (delta.length() * 4));
-            double lift = 0.6 + delta.length() * 0.12;
+        /** Удар: орб роздувається просто на цілі й гасне — сам собі спалах. */
+        private void burst() {
+            if (orb == null) return;
+            ItemDisplay spent = orb;
+            orb = null;
 
-            for (int i = 0; i <= steps; i++) {
-                double t = (double) i / steps;
-                Location point = start.clone().add(delta.clone().multiply(t));
-                point.add(0, Math.sin(Math.PI * t) * lift, 0);
-
-                point.getWorld().spawnParticle(Particle.END_ROD, point, 1, 0, 0, 0, 0);
-                if (i % 3 == 0) {
-                    point.getWorld().spawnParticle(Particle.SOUL_FIRE_FLAME, point, 1, 0.02, 0.02, 0.02, 0);
-                }
-            }
-            start.getWorld().playSound(start, Sound.ENTITY_BREEZE_SHOOT, 0.5f, 1.8f);
+            spent.setInterpolationDelay(0);
+            spent.setInterpolationDuration(3);
+            spent.setTransformation(new Transformation(
+                    new Vector3f(), new Quaternionf(), new Vector3f(2.4f, 2.4f, 2.4f), new Quaternionf()));
+            Bukkit.getScheduler().runTaskLater(getPlugin(), spent::remove, 4L);
         }
 
-        /** Ланцюг обірвався — душа розсипається на місці останнього удару. */
+        /** Ланцюг обірвався — душа стискається в точку й гасне. */
         private void fade() {
-            from.getWorld().spawnParticle(Particle.SOUL, from, 25, 0.3, 0.4, 0.3, 0.05);
             from.getWorld().playSound(from, Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.7f, 0.6f);
+            if (orb == null) return;
+
+            ItemDisplay spent = orb;
+            orb = null;
+            spent.setInterpolationDelay(0);
+            spent.setInterpolationDuration(5);
+            spent.setTransformation(new Transformation(
+                    new Vector3f(), new Quaternionf(), new Vector3f(0.01f, 0.01f, 0.01f), new Quaternionf()));
+            Bukkit.getScheduler().runTaskLater(getPlugin(), spent::remove, 6L);
         }
     }
-
-    // ==========================================
-    //   КЛІЄНТСЬКИЙ СПАЛАХ
-    // ==========================================
 
     /** Кожен удар на мить підсвічує місце — світло клієнтське, у світі нічого не лишається. */
     private void flash(Location location) {

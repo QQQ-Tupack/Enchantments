@@ -1,25 +1,23 @@
 package me.enchantments.mechanics;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.entity.Arrow;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
-import me.enchantments.main.Enchantments;
+import me.enchantments.main.Mechanic;
+
+import java.util.List;
+import java.util.Map;
 
 public final class AxePullMechanic extends Mechanic {
-
-    private final Map<UUID, Long> activePulls = new ConcurrentHashMap<>();
 
     @Override
     public String getId() {
@@ -42,13 +40,8 @@ public final class AxePullMechanic extends Mechanic {
     }
 
     @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return false;
-    }
-
-    @Override
     public List<Material> getSupportedItems() {
-        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, 
+        return List.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE,
                        Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE);
     }
 
@@ -60,45 +53,56 @@ public final class AxePullMechanic extends Mechanic {
     @Override
     public Map<String, Object> getDefaults() {
         return Map.of(
-            "collect-radius", 1.5
+            "collect-radius", 1.5,
+            "duration-ticks", 40,
+            "cooldown-ticks", 80,
+            "hunger-cost", 1
         );
     }
 
     @Override
-    protected void onEnable() {
-        new PullTask().runTaskTimer(Enchantments.getInstance(), 0L, 1L);
-    }
-
-    @EventHandler
-    public void onThrow(PlayerInteractEvent e) {
-        if (!isMechanicEnabled()) return;
-        Player p = e.getPlayer();
-        ItemStack axe = p.getInventory().getItemInMainHand();
+    protected void onRightClick(PlayerInteractEvent e, Player player, int level) {
+        ItemStack axe = e.getItem();
         if (levelOf(axe) == 0) return;
-        
-        activePulls.put(p.getUniqueId(), System.currentTimeMillis());
+        if (!ready(player, axe)) {
+            deny(player);
+            return;
+        }
+        if (!spend(player, getInt("hunger-cost"))) return;
+
+        cooldown(player, axe, getInt("cooldown-ticks"));
+        activation(player);
+        new Pull(player, level).runTaskTimer(getPlugin(), 0L, 1L);
     }
 
-    private final class PullTask extends BukkitRunnable {
+    private final class Pull extends BukkitRunnable {
+
+        private final Player player;
+        private final int level;
+        private int ticks;
+
+        private Pull(Player player, int level) {
+            this.player = player;
+            this.level = level;
+        }
+
         @Override
         public void run() {
-            double collectRadius = getDouble("collect-radius");
-            Bukkit.getOnlinePlayers().forEach(player -> {
-                UUID uuid = player.getUniqueId();
-                if (!activePulls.containsKey(uuid)) return;
-                
-                player.getWorld().getNearbyEntities(player.getLocation(), collectRadius, collectRadius, collectRadius).stream()
-                        .filter(ent -> ent instanceof ExperienceOrb || ent instanceof Item || ent instanceof Arrow)
-                        .forEach(ent -> {
-                            if (ent instanceof Item item && item.getPickupDelay() > 0) return;
-                            Vector v = player.getEyeLocation().toVector().subtract(ent.getLocation().toVector());
-                            if (v.lengthSquared() > 1e-6) ent.setVelocity(v.normalize().multiply(0.8));
-                        });
-                
-                if (System.currentTimeMillis() - activePulls.get(uuid) > 2000) {
-                    activePulls.remove(uuid);
-                }
-            });
+            if (!player.isOnline() || player.isDead() || ticks++ >= getInt("duration-ticks")) {
+                cancel();
+                return;
+            }
+
+            double radius = getDouble("collect-radius") + (level - 1) * 1.5;
+
+            for (Entity nearby : player.getWorld().getNearbyEntities(player.getLocation(), radius, radius, radius)) {
+                if (!(nearby instanceof ExperienceOrb || nearby instanceof Item || nearby instanceof Arrow)) continue;
+                if (nearby instanceof Item item && item.getPickupDelay() > 0) continue;
+
+                Vector pull = player.getEyeLocation().toVector().subtract(nearby.getLocation().toVector());
+                if (pull.lengthSquared() > 1e-6) nearby.setVelocity(pull.normalize().multiply(0.8));
+                if (ticks % 4 == 0) particles(nearby.getLocation(), Particle.ENCHANT, 1, 0, 0, 0, 0);
+            }
         }
     }
 }

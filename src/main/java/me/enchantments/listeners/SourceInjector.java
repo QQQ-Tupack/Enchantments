@@ -2,7 +2,8 @@ package me.enchantments.listeners;
 
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
-import me.enchantments.mechanics.Mechanic;
+import me.enchantments.main.Mechanic;
+
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.ConfigurationSection;

@@ -1,8 +1,6 @@
 package me.enchantments.mechanics;
 
-import me.enchantments.main.Enchantments;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.enchantments.main.Mechanic;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -77,8 +75,7 @@ public final class SoulboundMechanic extends Mechanic {
     public Map<String, Object> getDefaults() {
         return Map.of(
             "durability-cost-percent", 25,
-            "break-on-empty-durability", false,
-            "restore-message", true
+            "break-on-empty-durability", false
         );
     }
 
@@ -226,13 +223,13 @@ public final class SoulboundMechanic extends Mechanic {
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent e) {
-        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> restore(e.getPlayer()), 1L);
+        Bukkit.getScheduler().runTaskLater(getPlugin(), () -> restore(e.getPlayer()), 1L);
     }
 
     /** Якщо гравець вийшов, не відродившись, речі чекають у PDC до наступного входу. */
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskLater(getPlugin(), () -> {
             if (!e.getPlayer().isDead()) restore(e.getPlayer());
         }, 20L);
     }
@@ -275,11 +272,8 @@ public final class SoulboundMechanic extends Mechanic {
 
         if (restored == 0) return;
 
-        player.getWorld().playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.5f, 1.6f);
-        player.getWorld().spawnParticle(Particle.END_ROD, player.getLocation().add(0, 1, 0), 20, 0.4, 0.6, 0.4, 0.03);
-        if (getBoolean("restore-message")) {
-            player.sendMessage(Component.text("Прив'язані речі повернулись до вас (" + restored + ").", NamedTextColor.LIGHT_PURPLE));
-        }
+        soundAt(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.5f, 1.6f);
+        particles(player.getLocation().add(0, 1, 0), Particle.END_ROD, 20, 0.4);
     }
 
     // ==========================================

@@ -15,61 +15,39 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.mechanics.Mechanic.EnchantSlot;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.enchantments.main.Mechanic;
 
 public final class GrapplingHookMechanic extends Mechanic {
 
-    private final Set<UUID> pulling = new HashSet<>();
-    private final Set<UUID> wallImmune = new HashSet<>();
+    private final Set<UUID> flying = new HashSet<>();
 
-    @Override
-    public String getId() {
-        return "grappling_hook";
-    }
+    private static final double DRAG = 0.91;
+    private static final double CAP = 3.9;
+    private static final double FALL = 5.88;
 
-    @Override
-    public String getName() {
-        return "Гак кішка";
-    }
+    private static final double LIP = 1.5;
+    private static final double ARC = 6.0;
+    private static final double KICK = 0.42;
+    private static final double DIVE = 1.0;
 
-    @Override
-    public String getDescription() {
-        return "Дозволяє рухатися швидко за допомогою гака кішки";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 3;
-    }
-
-    @Override
-    protected boolean hideEnchantmentGlintDefault() {
-        return true;
-    }
-
-    @Override
-    public List<Material> getSupportedItems() {
-        return List.of(Material.BEDROCK);
-    }
-
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND);
-    }
+    @Override public String getId() { return "grappling_hook"; }
+    @Override public String getName() { return "Гак кішка"; }
+    @Override public String getDescription() { return "Дозволяє рухатися швидко за допомогою гака кішки"; }
+    @Override public int getMaxLevel() { return 3; }
+    @Override protected boolean hideEnchantmentGlintDefault() { return true; }
+    @Override protected boolean grindstoneRemovableDefault() { return false; }
+    @Override public List<Material> getSupportedItems() { return List.of(Material.BEDROCK); }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND); }
 
     @Override
     public Map<String, Object> getDefaults() {
         return Map.of(
-            "pull-speed", 1.5,
             "launch-multiplier", 2.5,
             "min-entity-distance", 3.0,
-            "wall-immunity-ticks", 60,
+            "immunity-ticks", 60,
             "durability-cost", 1
         );
     }
@@ -77,8 +55,9 @@ public final class GrapplingHookMechanic extends Mechanic {
     @EventHandler
     public void onDamage(EntityDamageEvent e) {
         if (!isMechanicEnabled()) return;
-        if (e.getEntity() instanceof Player p && e.getCause() == EntityDamageEvent.DamageCause.FLY_INTO_WALL
-                && wallImmune.contains(p.getUniqueId())) {
+        if (!(e.getEntity() instanceof Player p) || !flying.contains(p.getUniqueId())) return;
+        if (e.getCause() == EntityDamageEvent.DamageCause.FLY_INTO_WALL
+                || e.getCause() == EntityDamageEvent.DamageCause.FALL) {
             e.setCancelled(true);
         }
     }
@@ -91,29 +70,28 @@ public final class GrapplingHookMechanic extends Mechanic {
         ItemStack rod = p.getInventory().getItem(e.getHand());
         if (levelOf(rod) == 0) return;
 
-        double launchMultiplier = getDouble("launch-multiplier");
         double minEntityDistance = getDouble("min-entity-distance");
         int durabilityCost = getInt("durability-cost");
 
         FishHook hook = e.getHook();
-        hook.setVelocity(hook.getVelocity().multiply(launchMultiplier));
+        hook.setVelocity(hook.getVelocity().multiply(getDouble("launch-multiplier")));
         p.setFallDistance(0);
 
         Bukkit.getScheduler().runTaskTimer(Enchantments.getInstance(), task -> {
-            if (hook.isDead() || !hook.isValid() || hook.getLocation().distance(p.getLocation()) >= 20) {
+        	if (hook.isDead() || !hook.isValid() || hook.isInWater()
+                    || hook.getLocation().distance(p.getLocation()) >= 20) {
                 if (!hook.isDead()) hook.remove();
                 task.cancel();
             } else if (e.getState() == PlayerFishEvent.State.CAUGHT_ENTITY && e.getCaught() instanceof LivingEntity target) {
-                if (target.getLocation().distance(p.getLocation()) < minEntityDistance) {
-                    p.sendMessage(Component.text("Ціль занадто близько!", NamedTextColor.RED));
-                } else {
-                    pullTowards(p, target.getLocation());
+                if (target.getLocation().distance(p.getLocation()) >= minEntityDistance) {
+                    pull(p, target.getLocation(), 0);
                     p.getInventory().setItem(e.getHand(), damage(p, rod, durabilityCost));
                 }
                 hook.remove();
                 task.cancel();
             } else if (hook.isOnGround() || nearSolidBlock(hook.getLocation())) {
-                pullTowards(p, hook.getLocation());
+                Location at = hook.getLocation();
+                pull(p, goal(at), roof(at) ? 0 : LIP);
                 p.getInventory().setItem(e.getHand(), damage(p, rod, durabilityCost));
                 hook.remove();
                 task.cancel();
@@ -127,36 +105,72 @@ public final class GrapplingHookMechanic extends Mechanic {
                 || !l.clone().add(0, 0, 1).getBlock().isPassable() || !l.clone().add(0, 0, -1).getBlock().isPassable();
     }
 
-    private void pullTowards(Player p, Location target) {
-        UUID uid = p.getUniqueId();
-        Location from = p.getLocation();
-        Vector dir = target.toVector().subtract(from.toVector());
-        double distance = dir.length();
-        double pullSpeed = getDouble("pull-speed");
-        double time = Math.max(distance / pullSpeed, 1);
-        dir.normalize();
-        Vector velocity = dir.multiply(distance / time);
-        velocity.setY((target.getY() - from.getY()) / time + 0.04 * time);
-
-        p.getWorld().spawnParticle(Particle.CRIT, from, 5);
-        p.getWorld().playSound(from, Sound.ENTITY_ENDER_DRAGON_FLAP, 0.5f, 1.5f);
-        p.setVelocity(velocity);
-
-        pulling.add(uid);
-        wallImmune.add(uid);
-        int wallImmunityTicks = getInt("wall-immunity-ticks");
-        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(), () -> wallImmune.remove(uid), (long) wallImmunityTicks);
-
-        new BukkitRunnable() {
-            @Override public void run() {
-                if (!p.isValid() || !pulling.contains(uid)) { cancel(); return; }
-                if (isOnGround(p)) { pulling.remove(uid); cancel(); }
-            }
-        }.runTaskTimer(Enchantments.getInstance(), 2L, 1L);
+    private static Location goal(Location at) {
+        return at.getBlock().getLocation().add(0.5, 0, 0.5);
     }
 
-    private boolean isOnGround(Player p) {
-        return !p.getLocation().subtract(0, 0.05, 0).getBlock().isPassable();
+    private static boolean roof(Location at) {
+        return !at.clone().add(0, 1, 0).getBlock().isPassable();
+    }
+
+    private void pull(Player p, Location goal, double clear) {
+        Location from = p.getLocation();
+        boolean ground = p.isOnGround();
+
+        double dx = goal.getX() - from.getX();
+        double dz = goal.getZ() - from.getZ();
+        double dy = goal.getY() - from.getY();
+        double away = Math.hypot(dx, dz);
+        double grip = ground ? 0.546 : DRAG;
+        double ceiling = Math.max(dy + clear, 0) + ARC;
+        boolean below = dy + clear < 0;
+
+        int ticks = 1;
+        while (ticks < 45 && peak(ticks) < dy + clear) ticks++;
+        while (!below && ticks < 20 && away / spread(grip, ticks) > CAP && peak(ticks) < ceiling) ticks++;
+
+        double up = below ? -DIVE : Math.min(top(ticks), CAP);
+        if (!below && ground) up = Math.max(up, KICK);
+        double reach = spread(grip, below ? dive(up, dy) : ticks);
+
+        p.setVelocity(new Vector(
+                Math.clamp(dx / reach, -CAP, CAP),
+                up,
+                Math.clamp(dz / reach, -CAP, CAP)));
+        p.setFallDistance(0);
+
+        particles(from, Particle.CRIT, 5, 0.1);
+        soundFor(p, Sound.ENTITY_ENDER_DRAGON_FLAP, 0.5f, 1.5f);
+
+        UUID uid = p.getUniqueId();
+        flying.add(uid);
+        Bukkit.getScheduler().runTaskLater(Enchantments.getInstance(),
+                () -> flying.remove(uid), getInt("immunity-ticks"));
+    }
+
+    private static int dive(double up, double dy) {
+        double speed = up;
+        double height = 0;
+        int ticks = 0;
+        while (ticks < 100 && height > dy) {
+            height += speed;
+            speed = (speed - FALL / 49) * 0.98;
+            ticks++;
+        }
+        return ticks;
+    }
+
+    private static double top(int ticks) {
+        return FALL * (Math.pow(0.98, -ticks) - 1);
+    }
+
+    private static double peak(int ticks) {
+        double rise = (1 - Math.pow(0.98, ticks)) / 0.02;
+        return top(ticks) * rise - FALL * (ticks - rise);
+    }
+
+    private static double spread(double grip, int ticks) {
+        return 1 + grip * (1 - Math.pow(DRAG, ticks)) / (1 - DRAG);
     }
 
     private ItemStack damage(Player p, ItemStack item, int amount) {
@@ -164,7 +178,7 @@ public final class GrapplingHookMechanic extends Mechanic {
         int maxDurability = d.hasMaxDamage() ? d.getMaxDamage() : item.getType().getMaxDurability();
         int newDamage = d.getDamage() + amount;
         if (maxDurability > 0 && newDamage >= maxDurability) {
-            p.getWorld().playSound(p.getLocation(), Sound.ENTITY_ITEM_BREAK, 1f, 1f);
+            soundFor(p, Sound.ENTITY_ITEM_BREAK, 1f, 1f);
             return null;
         }
         d.setDamage(newDamage);

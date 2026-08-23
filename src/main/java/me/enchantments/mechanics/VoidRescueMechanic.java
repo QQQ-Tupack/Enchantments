@@ -7,68 +7,25 @@ import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.inventory.ItemStack;
+
+import me.enchantments.main.Mechanic;
 
 import java.util.List;
 import java.util.Map;
 
 public final class VoidRescueMechanic extends Mechanic {
 
-    @Override
-    public String getId() {
-        return "void_rescue";
-    }
+    @Override public String getId() { return "void_rescue"; }
+    @Override public String getName() { return "Порятунок з безодні"; }
+    @Override public String getDescription() { return "Рятує гравця від падіння у безодню, телепортуючи на найближчий клаптик землі, витрачаючи тотем"; }
+    @Override public int getMaxLevel() { return 1; }
+    @Override public List<Material> getSupportedItems() { return List.of(Material.TOTEM_OF_UNDYING); }
+    @Override public List<EnchantSlot> getSlots() { return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND, EnchantSlot.HEAD); }
 
-    @Override
-    public String getName() {
-        return "Порятунок з безодні";
-    }
-
-    @Override
-    public String getDescription() {
-        return "Рятує гравця від падіння у безодню, телепортуючи на найближчий клаптик землі, витрачаючи тотем";
-    }
-
-    @Override
-    public int getMaxLevel() {
-        return 1;
-    }
-
-    @Override
-    public List<Material> getSupportedItems() {
-        return List.of(Material.TOTEM_OF_UNDYING);
-    }
-
-    @Override
-    public List<EnchantSlot> getSlots() {
-        return List.of(EnchantSlot.MAINHAND, EnchantSlot.OFFHAND, EnchantSlot.HEAD);
-    }
-
-    @Override
-    public Map<String, Object> getDefaults() {
-        return Map.of(
-            "search-radius", 128,
-            "search-step", 8,
-            "loaded-chunks-only", true
-        );
-    }
-
-    @Override
-    public double getEnchantingTableChance() {
-        return 0.03;
-    }
-
-    @Override
-    public int getWeight() {
-        return 3;
-    }
-
-    @Override
-    public double getChestLootChance() {
-        return 0.05;
-    }
+    @Override public double getEnchantingTableChance() { return 0.03; }
+    @Override public int getWeight() { return 3; }
 
     @Override
     public List<String> getLootChests() {
@@ -85,40 +42,39 @@ public final class VoidRescueMechanic extends Mechanic {
         return Map.of("CLERIC", Map.of("villager-level", 5, "min-level", 1, "max-level", 1, "price", 40));
     }
 
+    @Override public int getAnvilBaseCost() { return 14; }
+
     @Override
-    public int getAnvilBaseCost() {
-        return 14;
+    public Map<String, Object> getDefaults() {
+        return Map.of(
+            "search-radius", 128,
+            "search-step", 8,
+            "loaded-chunks-only", true
+        );
     }
 
-    /** Шукає саме зачарований тотем, а не перший-ліпший у руках. */
-    private ItemStack totem(Player p) {
+    @Override
+    protected void onDamaged(EntityDamageEvent event, Player player, int level) {
+        if (event.getCause() != EntityDamageEvent.DamageCause.VOID) return;
+
+        event.setCancelled(true);
+        ItemStack totem = heldTotem(player);
+        if (totem != null) consume(player, totem);
+
+        Location safe = findNearestLand(player, getInt("search-radius"), getInt("search-step"));
+        player.teleport(safe);
+        player.setFallDistance(0);
+        soundAt(safe, Sound.ITEM_TOTEM_USE, 1f, 1f);
+        particles(safe, Particle.TOTEM_OF_UNDYING, 30, 0.5, 1, 0.5, 0.2);
+    }
+
+    /** Шукає саме зачарований тотем у руках, а не перший-ліпший (може бути в шоломі). */
+    private ItemStack heldTotem(Player p) {
         ItemStack main = p.getInventory().getItemInMainHand();
         if (main.getType() == Material.TOTEM_OF_UNDYING && levelOf(main) > 0) return main;
         ItemStack off = p.getInventory().getItemInOffHand();
         if (off.getType() == Material.TOTEM_OF_UNDYING && levelOf(off) > 0) return off;
         return null;
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onVoidFall(EntityDamageEvent e) {
-        if (!isMechanicEnabled()) return;
-        if (!(e.getEntity() instanceof Player player) || e.getCause() != EntityDamageEvent.DamageCause.VOID) return;
-
-        ItemStack totem = totem(player);
-        boolean fromHat = totem == null && levelOnPlayer(player) > 0;
-        if (totem == null && !fromHat) return;
-
-        e.setCancelled(true);
-        if (totem != null) consume(player, totem);
-
-        int searchRadius = getInt("search-radius");
-        int searchStep = getInt("search-step");
-        Location safe = findNearestLand(player, searchRadius, searchStep);
-
-        player.teleport(safe);
-        player.setFallDistance(0);
-        player.getWorld().playSound(safe, Sound.ITEM_TOTEM_USE, 1f, 1f);
-        player.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, safe, 30, 0.5, 1, 0.5, 0.2);
     }
 
     private void consume(Player player, ItemStack item) {

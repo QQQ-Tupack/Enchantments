@@ -1,7 +1,8 @@
 package me.enchantments.listeners;
 
 import me.enchantments.main.Enchantments;
-import me.enchantments.mechanics.Mechanic;
+import me.enchantments.main.Mechanic;
+
 // EnchantMeta removed — use Mechanic.hideEnchantmentGlint()
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
