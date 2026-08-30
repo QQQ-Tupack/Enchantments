@@ -10,12 +10,19 @@ import org.bukkit.Sound;
 import org.bukkit.entity.FishHook;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerFishEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.util.Vector;
+
+import io.papermc.paper.datacomponent.DataComponentTypes;
 
 import me.enchantments.main.Enchantments;
 import me.enchantments.main.Mechanic;
@@ -23,6 +30,7 @@ import me.enchantments.main.Mechanic;
 public final class GrapplingHookMechanic extends Mechanic {
 
     private final Set<UUID> flying = new HashSet<>();
+    private final Map<UUID, Integer> mainHandBusy = new HashMap<>();
 
     private static final double DRAG = 0.91;
     private static final double CAP = 3.9;
@@ -62,6 +70,19 @@ public final class GrapplingHookMechanic extends Mechanic {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInteract(PlayerInteractEvent e) {
+        if (e.getHand() != EquipmentSlot.HAND || !e.getAction().isRightClick()) return;
+        ItemStack main = e.getItem();
+        if (main == null || main.getType().isAir()) return;
+        if (e.useItemInHand() == Event.Result.DENY
+                || e.useInteractedBlock() == Event.Result.DENY
+                || e.getAction() == Action.RIGHT_CLICK_BLOCK
+                || main.hasData(DataComponentTypes.CONSUMABLE)) {
+            mainHandBusy.put(e.getPlayer().getUniqueId(), Bukkit.getCurrentTick());
+        }
+    }
+
     @EventHandler
     public void onFish(PlayerFishEvent e) {
         if (!isMechanicEnabled()) return;
@@ -69,6 +90,11 @@ public final class GrapplingHookMechanic extends Mechanic {
         Player p = e.getPlayer();
         ItemStack rod = p.getInventory().getItem(e.getHand());
         if (levelOf(rod) == 0) return;
+
+        if (e.getHand() == EquipmentSlot.OFF_HAND && mainHandBusy(p)) {
+            if (e.getState() == PlayerFishEvent.State.FISHING) e.setCancelled(true);
+            return;
+        }
 
         double minEntityDistance = getDouble("min-entity-distance");
         int durabilityCost = getInt("durability-cost");
@@ -97,6 +123,11 @@ public final class GrapplingHookMechanic extends Mechanic {
                 task.cancel();
             }
         }, 0L, 1L);
+    }
+
+    private boolean mainHandBusy(Player p) {
+        Integer tick = mainHandBusy.remove(p.getUniqueId());
+        return tick != null && Bukkit.getCurrentTick() - tick <= 1;
     }
 
     private boolean nearSolidBlock(Location l) {

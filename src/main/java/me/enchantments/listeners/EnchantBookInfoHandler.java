@@ -11,6 +11,18 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
+import org.bukkit.Tag;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Sign;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Levelled;
+import org.bukkit.block.data.Openable;
+import org.bukkit.block.data.Powerable;
+import org.bukkit.block.data.type.Bed;
+import org.bukkit.block.data.type.Cake;
+import org.bukkit.block.data.type.Candle;
+import org.bukkit.block.data.type.RespawnAnchor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -24,6 +36,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.ItemType;
 import org.bukkit.inventory.meta.BookMeta;
@@ -47,34 +60,27 @@ public class EnchantBookInfoHandler implements Listener {
     private static final String BASE = "book-info.";
     private static final String[] ROMAN = {"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
     private static final int MAX_ITEMS = 14;
-    /** Рендеряться моделлю, пласкої текстури в атласі items не мають — показуємо назвою. */
     private static final Set<Material> NO_ICON = EnumSet.of(Material.SHIELD);
+    private static final Set<Material> INTERACTIVE = EnumSet.of(
+            Material.CRAFTING_TABLE, Material.ENCHANTING_TABLE, Material.GRINDSTONE, Material.STONECUTTER,
+            Material.LOOM, Material.CARTOGRAPHY_TABLE, Material.SMITHING_TABLE, Material.BEACON,
+            Material.BELL, Material.JUKEBOX, Material.DAYLIGHT_DETECTOR, Material.ENDER_CHEST,
+            Material.CHISELED_BOOKSHELF, Material.DECORATED_POT, Material.VAULT, Material.DRAGON_EGG);
 
     private final JavaPlugin plugin = Enchantments.getInstance();
     private final Map<UUID, Long> hintCooldowns = new ConcurrentHashMap<>();
 
-    /**
-     * Дані однієї книги. Кастомна механіка й ванільне зачарування заповнюють один
-     * і той самий набір, тому сторінки в конфігу спільні, а резолвер — один.
-     * null означає "джерело такого не має" і рендериться як empty.
-     */
     private record Info(Component name, Component description, String id, int level, int maxLevel, int weight,
                         String anvilCost, String tableChance, String chestChance, Boolean grindstoneRemovable,
                         Boolean treasure, Boolean villagerTrade, List<String> items, List<String> excludedItems,
                         List<String> incompatible, List<String> lootChests, List<String> professions) {
     }
 
-    // ---------- Події ----------
-
-    /**
-     * Без ignoreCancelled: Bukkit створює PlayerInteractEvent з useInteractedBlock = DENY,
-     * якщо блока немає (RIGHT_CLICK_AIR), а isCancelled() читає саме це поле — тому клік
-     * по повітрю приходив "скасованим" і листенер не викликався.
-     */
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_AIR) return;
+        if (event.getClickedBlock() != null && interactive(event.getClickedBlock())) return;
         if (event.useItemInHand() == Event.Result.DENY) return;
 
         Optional<Info> info = read(event.getItem());
@@ -84,8 +90,21 @@ public class EnchantBookInfoHandler implements Listener {
         event.setUseInteractedBlock(Event.Result.DENY);
 
         Player player = event.getPlayer();
-        // openBook усередині обробки взаємодії інколи губиться клієнтом — відкриваємо наступним тіком
         plugin.getServer().getScheduler().runTask(plugin, () -> open(player, info.get()));
+    }
+
+    private static boolean interactive(Block block) {
+        BlockState state = block.getState(false);
+        if (state instanceof InventoryHolder || state instanceof Sign) return true;
+        BlockData data = block.getBlockData();
+        Material type = block.getType();
+        return data instanceof Openable
+                || data instanceof Powerable
+                || data instanceof Levelled
+                || data instanceof Bed || data instanceof Cake || data instanceof Candle
+                || data instanceof RespawnAnchor
+                || Tag.CAULDRONS.isTagged(type) || Tag.FLOWER_POTS.isTagged(type)
+                || INTERACTIVE.contains(type);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -113,8 +132,6 @@ public class EnchantBookInfoHandler implements Listener {
         });
     }
 
-    // ---------- Підказка ----------
-
     private void offerHint(Player player, ItemStack item) {
         if (onCooldown(player) || read(item).isEmpty()) return;
         hintCooldowns.put(player.getUniqueId(), System.currentTimeMillis());
@@ -126,8 +143,6 @@ public class EnchantBookInfoHandler implements Listener {
         long cooldown = config().getLong(BASE + "hint.cooldown-minutes", 30) * 60_000L;
         return last != null && System.currentTimeMillis() - last < cooldown;
     }
-
-    // ---------- Книга ----------
 
     private void open(Player player, Info info) {
         List<String> pages = config().getStringList(BASE + "pages");
@@ -168,9 +183,6 @@ public class EnchantBookInfoHandler implements Listener {
         );
     }
 
-    // ---------- Джерела даних ----------
-
-    /** Читає предмет один раз: спершу кастомна механіка, потім ванільне зачарування. */
     private Optional<Info> read(ItemStack item) {
         if (item == null || item.getType() != Material.ENCHANTED_BOOK) return Optional.empty();
         if (!(item.getItemMeta() instanceof EnchantmentStorageMeta meta)) return Optional.empty();
@@ -231,9 +243,7 @@ public class EnchantBookInfoHandler implements Listener {
                 items, List.of(), incompatible, List.of(), List.of()
         );
     }
-
-    // ---------- Конфіг ----------
-
+    
     private FileConfiguration config() {
         return plugin.getConfig();
     }
@@ -264,23 +274,19 @@ public class EnchantBookInfoHandler implements Listener {
         return values.stream().map(value -> format.replace("{value}", value)).collect(Collectors.joining("\n"));
     }
 
-    /** Довгі списки обрізаються, бо сторінка книги — 14 рядків. */
     private String names(List<String> itemIds) {
         List<String> names = new ArrayList<>(itemIds.stream()
                 .limit(MAX_ITEMS).map(EnchantBookInfoHandler::itemName).toList());
         if (itemIds.size() > MAX_ITEMS) names.add("...");
         return list(names);
     }
-
-    /** Ряд іконок в один рядок; предмети без пласкої текстури підставляються назвою. */
+    
     private String icons(List<String> itemIds) {
         if (itemIds.isEmpty()) return empty();
         String row = itemIds.stream().limit(MAX_ITEMS)
                 .map(EnchantBookInfoHandler::icon).collect(Collectors.joining(" "));
         return itemIds.size() > MAX_ITEMS ? row + " ..." : row;
     }
-
-    // ---------- Теги ----------
 
     private static String icon(String itemId) {
         Material material = Material.matchMaterial(itemId);
@@ -290,7 +296,6 @@ public class EnchantBookInfoHandler implements Listener {
                 : "<white><sprite:items:item/" + itemId + ">";
     }
 
-    /** Material сам знає свій ключ — item.* чи block.*, залежно від предмета. */
     private static String itemName(String itemId) {
         Material material = Material.matchMaterial(itemId);
         return lang(material != null ? material.translationKey() : "item.minecraft." + itemId);
@@ -304,7 +309,6 @@ public class EnchantBookInfoHandler implements Listener {
         return "<lang_or:" + key + ":'" + fallback + "'>";
     }
 
-    /** Лут-таблиці не мають перекладу в грі, тому власний ключ. */
     private static String lootChest(String lootTable) {
         String id = lootTable.substring(lootTable.lastIndexOf('/') + 1);
         return langOr("enchantments.chest." + id, pretty(id));

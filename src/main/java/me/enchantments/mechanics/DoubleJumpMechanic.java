@@ -9,6 +9,7 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.util.Vector;
@@ -78,9 +79,19 @@ public final class DoubleJumpMechanic extends Mechanic {
         );
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onToggleGlide(EntityToggleGlideEvent event) {
+        if (!(event.getEntity() instanceof Player player) || !event.isGliding()) return;
+        JumpState state = jumps.get(player.getUniqueId());
+        if (state == null) return;
+        if (System.currentTimeMillis() - state.jumpedAt() > DOUBLE_TAP_WINDOW_MS) return;
+        event.setCancelled(true);
+    }
+    
     @EventHandler
     public void onJump(PlayerJumpEvent event) {
         Player player = event.getPlayer();
+        if (player.isGliding()) player.setGliding(false);
         if (!eligible(player)) return;
         int level = levelOnPlayer(player);
         if (level == 0) return;
