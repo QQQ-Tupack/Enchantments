@@ -60,7 +60,26 @@ public final class GlintUpdateListener implements Listener {
     private void updateGlint(Player p) {
         Set<String> hideKeys = hideGlintKeys();
         for (ItemStack item : p.getInventory().getContents()) {
-            applyGlint(item, hideKeys);
+            if (item == null || item.getType().isAir()) continue;
+            if (!item.hasItemMeta()) continue;
+
+            boolean shouldApply = false;
+
+            // Проверяем актуальные зачарования предмета на момент вызова метода
+            for (org.bukkit.enchantments.Enchantment ench : item.getItemMeta().getEnchants().keySet()) {
+                String keyString = ench.getKey().toString(); // Например: "enchantments:double_jump" или "minecraft:sharpness"
+
+                // Проверяем, содержит ли ключ "enchantments:"
+                if (keyString.contains("enchantments:")) {
+                    shouldApply = true;
+                    break; // Нашли подходящее зачарование, дальше можно не проверять этот предмет
+                }
+            }
+
+            // Если условие выполнено, применяем метод
+            if (shouldApply) {
+                applyGlint(item, hideKeys);
+            }
         }
     }
 
